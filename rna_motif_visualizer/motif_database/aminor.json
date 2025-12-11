@@ -1,0 +1,60 @@
+{
+  "1S72": [
+    {
+      "chain": "A",
+      "residues": [101, 102, 103],
+      "motif_id": "A1",
+      "description": "A-minor interaction site 1",
+      "partner_residues": [150, 151, 152],
+      "source": "23S rRNA"
+    },
+    {
+      "chain": "A",
+      "residues": [120, 121, 122],
+      "motif_id": "A2",
+      "description": "A-minor interaction site 2",
+      "partner_residues": [180, 181, 182],
+      "source": "23S rRNA"
+    }
+  ],
+  "2QWY": [
+    {
+      "chain": "A",
+      "residues": [45, 46, 47],
+      "motif_id": "A1",
+      "description": "A-minor interaction in ribozyme",
+      "partner_residues": [65, 66, 67],
+      "source": "Hammerhead ribozyme"
+    }
+  ],
+  "1GID": [
+    {
+      "chain": "A",
+      "residues": [38, 39, 40],
+      "motif_id": "A1",
+      "description": "A-minor in group I intron",
+      "partner_residues": [70, 71, 72],
+      "source": "Group I intron"
+    }
+  ],
+  "3GXA": [
+    {
+      "chain": "A",
+      "residues": [20, 21, 22],
+      "motif_id": "A1",
+      "description": "A-minor in tRNA anticodon loop",
+      "partner_residues": [45, 46, 47],
+      "source": "tRNA"
+    }
+  ],
+  "1RNK": [
+    {
+      "chain": "A",
+      "residues": [30, 31, 32],
+      "motif_id": "A1",
+      "description": "A-minor in RNase P RNA",
+      "partner_residues": [50, 51, 52],
+      "source": "RNase P"
+    }
+  ]
+}

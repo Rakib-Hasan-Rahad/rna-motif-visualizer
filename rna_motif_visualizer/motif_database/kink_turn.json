@@ -1,0 +1,47 @@
+{
+  "1S72": [
+    {
+      "chain": "A",
+      "residues": [220, 221, 222, 223, 224, 225],
+      "motif_id": "KT1",
+      "description": "Kink-turn variant motif",
+      "source": "23S rRNA"
+    }
+  ],
+  "2QWY": [
+    {
+      "chain": "A",
+      "residues": [55, 56, 57, 58, 59, 60],
+      "motif_id": "KT1",
+      "description": "Kink-turn in hammerhead ribozyme",
+      "source": "Hammerhead ribozyme"
+    }
+  ],
+  "1GID": [
+    {
+      "chain": "A",
+      "residues": [110, 111, 112, 113, 114, 115],
+      "motif_id": "KT1",
+      "description": "Kink-turn in group I intron",
+      "source": "Group I intron"
+    }
+  ],
+  "3GXA": [
+    {
+      "chain": "A",
+      "residues": [70, 71, 72, 73, 74, 75],
+      "motif_id": "KT1",
+      "description": "Kink-turn in tRNA",
+      "source": "tRNA"
+    }
+  ],
+  "1RNK": [
+    {
+      "chain": "A",
+      "residues": [85, 86, 87, 88, 89, 90],
+      "motif_id": "KT1",
+      "description": "Kink-turn in RNase P RNA",
+      "source": "RNase P RNA"
+    }
+  ]
+}

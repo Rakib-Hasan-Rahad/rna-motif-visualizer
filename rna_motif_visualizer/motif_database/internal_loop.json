@@ -1,0 +1,66 @@
+{
+  "1S72": [
+    {
+      "chain": "A",
+      "residues": [155, 156, 157, 158, 159],
+      "motif_id": "IL1",
+      "description": "Internal loop between helical segments 1",
+      "loop_type": "symmetric",
+      "size": 5,
+      "source": "23S rRNA"
+    },
+    {
+      "chain": "A",
+      "residues": [170, 171, 172, 173, 174, 175],
+      "motif_id": "IL2",
+      "description": "Internal loop between helical segments 2",
+      "loop_type": "asymmetric",
+      "size": 6,
+      "source": "23S rRNA"
+    }
+  ],
+  "2QWY": [
+    {
+      "chain": "A",
+      "residues": [60, 61, 62, 63, 64],
+      "motif_id": "IL1",
+      "description": "Internal loop in hammerhead ribozyme",
+      "loop_type": "symmetric",
+      "size": 5,
+      "source": "Hammerhead ribozyme"
+    }
+  ],
+  "1GID": [
+    {
+      "chain": "A",
+      "residues": [90, 91, 92, 93, 94],
+      "motif_id": "IL1",
+      "description": "Internal loop in group I intron",
+      "loop_type": "symmetric",
+      "size": 5,
+      "source": "Group I intron"
+    }
+  ],
+  "3GXA": [
+    {
+      "chain": "A",
+      "residues": [75, 76, 77, 78, 79],
+      "motif_id": "IL1",
+      "description": "Internal loop in tRNA",
+      "loop_type": "asymmetric",
+      "size": 5,
+      "source": "tRNA"
+    }
+  ],
+  "1RNK": [
+    {
+      "chain": "A",
+      "residues": [80, 81, 82, 83, 84],
+      "motif_id": "IL1",
+      "description": "Internal loop in RNase P RNA",
+      "loop_type": "symmetric",
+      "size": 5,
+      "source": "RNase P RNA"
+    }
+  ]
+}

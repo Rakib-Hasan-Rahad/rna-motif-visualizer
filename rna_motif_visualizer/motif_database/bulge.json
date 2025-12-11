@@ -1,0 +1,66 @@
+{
+  "1S72": [
+    {
+      "chain": "A",
+      "residues": [165, 166, 167, 168],
+      "motif_id": "B1",
+      "description": "Bulge loop in helix 1",
+      "bulge_type": "symmetric",
+      "bulge_size": 3,
+      "source": "23S rRNA"
+    },
+    {
+      "chain": "A",
+      "residues": [185, 186, 187],
+      "motif_id": "B2",
+      "description": "Internal bulge loop",
+      "bulge_type": "asymmetric",
+      "bulge_size": 2,
+      "source": "23S rRNA"
+    }
+  ],
+  "2QWY": [
+    {
+      "chain": "A",
+      "residues": [75, 76, 77, 78],
+      "motif_id": "B1",
+      "description": "Bulge in hammerhead ribozyme",
+      "bulge_type": "symmetric",
+      "bulge_size": 3,
+      "source": "Hammerhead ribozyme"
+    }
+  ],
+  "1GID": [
+    {
+      "chain": "A",
+      "residues": [105, 106, 107, 108],
+      "motif_id": "B1",
+      "description": "Bulge in group I intron",
+      "bulge_type": "symmetric",
+      "bulge_size": 3,
+      "source": "Group I intron"
+    }
+  ],
+  "3GXA": [
+    {
+      "chain": "A",
+      "residues": [65, 66, 67, 68],
+      "motif_id": "B1",
+      "description": "Bulge in tRNA structure",
+      "bulge_type": "asymmetric",
+      "bulge_size": 2,
+      "source": "tRNA"
+    }
+  ],
+  "1RNK": [
+    {
+      "chain": "A",
+      "residues": [70, 71, 72, 73],
+      "motif_id": "B1",
+      "description": "Bulge in RNase P RNA",
+      "bulge_type": "symmetric",
+      "bulge_size": 3,
+      "source": "RNase P RNA"
+    }
+  ]
+}

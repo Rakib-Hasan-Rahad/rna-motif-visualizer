@@ -1,0 +1,52 @@
+{
+  "1S72": [
+    {
+      "chain": "A",
+      "residues": [175, 176, 177, 178, 179, 180, 181],
+      "motif_id": "SR1",
+      "description": "Sarcin-ricin loop - highly conserved",
+      "structural_features": ["major groove", "unusual geometry"],
+      "source": "23S rRNA"
+    }
+  ],
+  "2QWY": [
+    {
+      "chain": "A",
+      "residues": [85, 86, 87, 88, 89, 90, 91],
+      "motif_id": "SR1",
+      "description": "Sarcin-ricin loop in ribozyme",
+      "structural_features": ["hairpin"],
+      "source": "Hammerhead ribozyme"
+    }
+  ],
+  "1GID": [
+    {
+      "chain": "A",
+      "residues": [95, 96, 97, 98, 99, 100, 101],
+      "motif_id": "SR1",
+      "description": "Sarcin-ricin loop in group I intron",
+      "structural_features": ["loop region"],
+      "source": "Group I intron"
+    }
+  ],
+  "3GXA": [
+    {
+      "chain": "A",
+      "residues": [50, 51, 52, 53, 54, 55, 56],
+      "motif_id": "SR1",
+      "description": "Sarcin-ricin loop in tRNA",
+      "structural_features": ["variable loop"],
+      "source": "tRNA"
+    }
+  ],
+  "1RNK": [
+    {
+      "chain": "A",
+      "residues": [60, 61, 62, 63, 64, 65, 66],
+      "motif_id": "SR1",
+      "description": "Sarcin-ricin loop in RNase P RNA",
+      "structural_features": ["conserved motif"],
+      "source": "RNase P RNA"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "1S72": [
+    {
+      "chain": "A",
+      "residues": [145, 146, 147, 148, 149, 150],
+      "motif_id": "J1",
+      "description": "Three-helix junction point 1",
+      "junction_type": "three-way",
+      "source": "23S rRNA"
+    },
+    {
+      "chain": "A",
+      "residues": [195, 196, 197, 198, 199, 200],
+      "motif_id": "J2",
+      "description": "Four-helix junction point",
+      "junction_type": "four-way",
+      "source": "23S rRNA"
+    }
+  ],
+  "2QWY": [
+    {
+      "chain": "A",
+      "residues": [40, 41, 42, 43, 44, 45],
+      "motif_id": "J1",
+      "description": "Junction in hammerhead ribozyme",
+      "junction_type": "three-way",
+      "source": "Hammerhead ribozyme"
+    }
+  ],
+  "1GID": [
+    {
+      "chain": "A",
+      "residues": [75, 76, 77, 78, 79, 80],
+      "motif_id": "J1",
+      "description": "Junction in group I intron",
+      "junction_type": "three-way",
+      "source": "Group I intron"
+    }
+  ],
+  "3GXA": [
+    {
+      "chain": "A",
+      "residues": [25, 26, 27, 28, 29, 30],
+      "motif_id": "J1",
+      "description": "Junction in tRNA",
+      "junction_type": "three-way",
+      "source": "tRNA"
+    }
+  ],
+  "1RNK": [
+    {
+      "chain": "A",
+      "residues": [35, 36, 37, 38, 39, 40],
+      "motif_id": "J1",
+      "description": "Junction in RNase P RNA",
+      "junction_type": "three-way",
+      "source": "RNase P RNA"
+    }
+  ]
+}

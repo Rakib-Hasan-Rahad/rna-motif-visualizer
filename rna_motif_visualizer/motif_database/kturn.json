@@ -1,0 +1,61 @@
+{
+  "1S72": [
+    {
+      "chain": "A",
+      "residues": [77, 78, 79, 80, 81, 82],
+      "motif_id": "K1",
+      "description": "K-turn motif in 23S rRNA",
+      "source": "Eukaryotic ribosome"
+    },
+    {
+      "chain": "A",
+      "residues": [92, 93, 94, 95, 96, 97],
+      "motif_id": "K2",
+      "description": "Secondary K-turn",
+      "source": "Eukaryotic ribosome"
+    }
+  ],
+  "2QWY": [
+    {
+      "chain": "A",
+      "residues": [32, 33, 34, 35, 36, 37],
+      "motif_id": "K1",
+      "description": "K-turn in hammerhead ribozyme",
+      "source": "Plant ribozyme"
+    }
+  ],
+  "1GID": [
+    {
+      "chain": "A",
+      "residues": [25, 26, 27, 28, 29, 30],
+      "motif_id": "K1",
+      "description": "K-turn in group I intron",
+      "source": "Group I intron"
+    },
+    {
+      "chain": "A",
+      "residues": [55, 56, 57, 58, 59, 60],
+      "motif_id": "K2",
+      "description": "Secondary K-turn region",
+      "source": "Group I intron"
+    }
+  ],
+  "3GXA": [
+    {
+      "chain": "A",
+      "residues": [40, 41, 42, 43, 44, 45],
+      "motif_id": "K1",
+      "description": "K-turn in tRNA",
+      "source": "tRNA structure"
+    }
+  ],
+  "1RNK": [
+    {
+      "chain": "A",
+      "residues": [15, 16, 17, 18, 19, 20],
+      "motif_id": "K1",
+      "description": "K-turn in RNase P RNA",
+      "source": "RNase P"
+    }
+  ]
+}
