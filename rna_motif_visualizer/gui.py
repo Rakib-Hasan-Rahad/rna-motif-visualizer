@@ -88,6 +88,25 @@ class MotifVisualizerGUI:
             self.logger.error(f"Failed to get motif types: {e}")
             return []
     
+    def set_background_color(self, color_name):
+        """
+        Change the background color of non-motif residues.
+        
+        Args:
+            color_name (str): PyMOL color name (e.g., 'gray80', 'white', 'lightgray')
+        """
+        try:
+            colors.set_background_color(color_name)
+            # Recolor the current structure if one is loaded
+            current_structure = self.viz_manager.structure_loader.get_current_structure()
+            if current_structure:
+                cmd.color(color_name, current_structure)
+                self.logger.success(f"Background color changed to {color_name}")
+            else:
+                self.logger.info(f"Background color preference set to {color_name}")
+        except Exception as e:
+            self.logger.error(f"Failed to change background color: {e}")
+    
     def get_motif_info(self, motif_type):
         """
         Get information about a motif type.
@@ -168,19 +187,51 @@ def initialize_gui():
         """PyMOL command: Load structure and show motifs."""
         gui.load_structure_action(pdb_id_or_path)
     
-    def toggle_motif(motif_type, visible="on"):
+    def toggle_motif(motif_type='', visible=''):
         """PyMOL command: Toggle motif visibility."""
-        visible_bool = visible.lower() in ['on', 'true', '1', 'yes']
-        gui.toggle_motif_action(motif_type, visible_bool)
+        # PyMOL can pass arguments different ways, so handle both
+        
+        # Case 1: Both arguments passed separately
+        if motif_type and visible:
+            motif_arg = motif_type
+            visible_arg = visible
+        else:
+            # Case 2: Everything in motif_type as a single string
+            # This happens when user types: rna_toggle KTURN on
+            full_arg = str(motif_type).strip()
+            parts = full_arg.split()
+            
+            if len(parts) < 2:
+                gui.logger.error(f"Usage: rna_toggle MOTIF_TYPE on/off")
+                gui.logger.error(f"Example: rna_toggle KTURN on")
+                return
+            
+            motif_arg = parts[0]
+            visible_arg = parts[1]
+        
+        # Parse visibility
+        visible_bool = str(visible_arg).lower() in ['on', 'true', '1', 'yes', 'show']
+        motif_arg = str(motif_arg).upper().strip()
+        
+        gui.toggle_motif_action(motif_arg, visible_bool)
     
     def motif_status():
         """PyMOL command: Show plugin status."""
         gui.print_status()
     
+    def set_bg_color(color_name='gray80'):
+        """PyMOL command: Change background color of non-motif residues."""
+        # Handle the color name argument
+        color_arg = str(color_name).strip()
+        if not color_arg:
+            color_arg = 'gray80'
+        gui.set_background_color(color_arg)
+    
     # Add commands to PyMOL
     cmd.extend('rna_load', load_structure)
     cmd.extend('rna_toggle', toggle_motif)
     cmd.extend('rna_status', motif_status)
+    cmd.extend('rna_bg_color', set_bg_color)
     
     gui.logger.success("RNA Motif Visualizer GUI initialized")
-    gui.logger.info("Available commands: rna_load, rna_toggle, rna_status")
+    gui.logger.info("Available commands: rna_load, rna_toggle, rna_status, rna_bg_color")

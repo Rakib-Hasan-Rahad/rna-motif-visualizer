@@ -3,6 +3,17 @@ RNA Motif Visualizer - Color Configuration Module
 Defines unique colors for each motif class for clear visualization.
 """
 
+# ==============================================================================
+# BACKGROUND COLOR CONFIGURATION
+# ==============================================================================
+# Color for non-motif residues (provides contrast with motif colors)
+# Options: 'gray80', 'white', 'lightgray', 'gray', or custom RGB values
+NON_MOTIF_COLOR = 'gray80'  # Light gray - great contrast with colorful motifs
+
+# You can also use PyMOL color names like:
+# 'white', 'gray', 'gray40', 'gray60', 'gray80', 'lightgray'
+# ==============================================================================
+
 # Define colors for each motif type
 # Format: RGB values normalized to 0-1 range
 MOTIF_COLORS = {
@@ -92,3 +103,19 @@ MOTIF_LEGEND = {
     'INTERNAL_LOOP': {'color': 'lightblue', 'description': 'Internal loops'},
     'JUNCTION': {'color': 'gold', 'description': 'RNA junctions'},
 }
+
+
+def set_background_color(color_name):
+    """
+    Change the non-motif background color.
+    
+    Args:
+        color_name (str): PyMOL color name (e.g., 'gray80', 'white', 'lightgray')
+    """
+    global NON_MOTIF_COLOR
+    NON_MOTIF_COLOR = color_name
+
+
+def get_background_color():
+    """Get the current non-motif background color."""
+    return NON_MOTIF_COLOR

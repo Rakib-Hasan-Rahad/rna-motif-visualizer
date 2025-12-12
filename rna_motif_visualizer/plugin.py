@@ -41,6 +41,9 @@ def __init_plugin__(app):
     print("  1. Load a structure: rna_load 1S72")
     print("  2. Toggle motifs: rna_toggle KTURN on/off")
     print("  3. Check status: rna_status")
+    print("  4. Change bg color: rna_bg_color gray80")
+    print("\nBackground color options:")
+    print("  gray80, gray60, gray40, white, lightgray, etc.")
     print("="*60 + "\n")
 
 

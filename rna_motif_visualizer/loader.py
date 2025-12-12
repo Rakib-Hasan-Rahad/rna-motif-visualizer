@@ -220,6 +220,21 @@ class VisualizationManager:
         self.motif_loader = MotifLoader(cmd, database_dir)
         self.logger = get_logger()
     
+    def color_non_motif_residues(self, structure_name):
+        """
+        Color non-motif residues with a neutral color for contrast.
+        
+        Args:
+            structure_name (str): Name of structure in PyMOL
+        """
+        try:
+            # Color the entire structure with the configured background color
+            background_color = colors.NON_MOTIF_COLOR
+            self.cmd.color(background_color, structure_name)
+            self.logger.info(f"Colored structure with {background_color} for motif contrast")
+        except Exception as e:
+            self.logger.error(f"Failed to color non-motif residues: {e}")
+    
     def load_and_visualize(self, pdb_id_or_path):
         """
         Complete workflow: load structure and visualize motifs.
@@ -237,7 +252,10 @@ class VisualizationManager:
         
         pdb_id = self.structure_loader.get_current_pdb_id()
         
-        # Load motifs
+        # Color non-motif residues with neutral color for contrast
+        self.color_non_motif_residues(structure_name)
+        
+        # Load motifs (these will override the gray color with motif colors)
         motifs = self.motif_loader.load_motifs(structure_name, pdb_id)
         return motifs
     
