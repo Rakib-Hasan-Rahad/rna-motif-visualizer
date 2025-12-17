@@ -50,9 +50,11 @@ class MotifDatabaseParser:
         """
         Get all motif instances for a specific PDB ID and motif type.
         
+        Supports both specific PDB IDs and generic 'RNA_STRUCTURE' key.
+        
         Args:
             pdb_id (str): PDB ID (e.g., '1S72')
-            motif_type (str): Motif type (e.g., 'kturn')
+            motif_type (str): Motif type (e.g., 'kink_turn')
         
         Returns:
             list: List of motif dictionaries for this PDB, or empty list if none found
@@ -62,7 +64,14 @@ class MotifDatabaseParser:
             return []
         
         pdb_key = pdb_id.upper()
-        return data.get(pdb_key, [])
+        
+        # Try specific PDB ID first, then fall back to generic RNA_STRUCTURE key
+        motifs = data.get(pdb_key, [])
+        if motifs:
+            return motifs
+        
+        # Fall back to generic RNA_STRUCTURE key for universal motif data
+        return data.get('RNA_STRUCTURE', [])
     
     def list_available_motif_types(self):
         """
