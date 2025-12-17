@@ -138,19 +138,73 @@ class MotifLoader:
                     self.loaded_motifs[motif_type_upper] = {
                         'object_name': obj_name,
                         'count': len(motifs),
-                        'visible': True
+                        'visible': True,
+                        'motifs': motifs  # Store motif details
                     }
                     
                     self.logger.success(
                         f"Loaded {len(motifs)} {motif_type_upper} motifs "
                         f"into {obj_name}"
                     )
+                    
+                    # Print detailed motif information
+                    for idx, motif in enumerate(motifs, 1):
+                        motif_id = motif.get('motif_id', 'Unknown')
+                        chain = motif.get('chain', 'N/A')
+                        residues = motif.get('residues', [])
+                        partner_residues = motif.get('partner_residues', [])
+                        
+                        # Format residues as range if consecutive
+                        res_str = self._format_residues(residues)
+                        partner_str = self._format_residues(partner_residues)
+                        
+                        self.logger.info(
+                            f"  [{idx}] ID: {motif_id} | Chain: {chain} | "
+                            f"Residues: {res_str} | Partners: {partner_str}"
+                        )
             
             return self.loaded_motifs
             
         except Exception as e:
             self.logger.error(f"Failed to load motifs: {e}")
             return {}
+    
+    def _format_residues(self, residues):
+        """
+        Format residue list as ranges or individual numbers.
+        
+        Args:
+            residues (list): List of residue numbers
+        
+        Returns:
+            str: Formatted residue string (e.g., "77-82, 92" or "77,78,79")
+        """
+        if not residues:
+            return "N/A"
+        
+        residues = sorted(set(residues))
+        ranges = []
+        start = residues[0]
+        end = residues[0]
+        
+        for i in range(1, len(residues)):
+            if residues[i] == end + 1:
+                end = residues[i]
+            else:
+                if start == end:
+                    ranges.append(str(start))
+                else:
+                    ranges.append(f"{start}-{end}")
+                start = residues[i]
+                end = residues[i]
+        
+        # Add last range
+        if start == end:
+            ranges.append(str(start))
+        else:
+            ranges.append(f"{start}-{end}")
+        
+        return ", ".join(ranges)
     
     def toggle_motif_type(self, motif_type, visible):
         """
