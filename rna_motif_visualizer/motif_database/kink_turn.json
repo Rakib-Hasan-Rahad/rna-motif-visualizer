@@ -1,47 +1,203 @@
 {
-  "1S72": [
+  "RNA_STRUCTURE": [
     {
-      "chain": "A",
-      "residues": [220, 221, 222, 223, 224, 225],
-      "motif_id": "KT1",
-      "description": "Kink-turn variant motif",
-      "source": "23S rRNA"
-    }
-  ],
-  "2QWY": [
+      "chain": "0",
+      "residues": [
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        92
+      ],
+      "motif_id": "Kink-turn1",
+      "description": "Kink-turn rank 1",
+      "partner_residues": [
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100
+      ],
+      "ranking": 1,
+      "location": "77-82/92-100"
+    },
     {
-      "chain": "A",
-      "residues": [55, 56, 57, 58, 59, 60],
-      "motif_id": "KT1",
-      "description": "Kink-turn in hammerhead ribozyme",
-      "source": "Hammerhead ribozyme"
-    }
-  ],
-  "1GID": [
+      "chain": "0",
+      "residues": [
+        1211,
+        1212,
+        1213,
+        1214,
+        1215,
+        1216,
+        1217,
+        1146,
+        1147
+      ],
+      "motif_id": "Kink-turn2",
+      "description": "Kink-turn rank 2",
+      "partner_residues": [
+        1146,
+        1147,
+        1148,
+        1149,
+        1150,
+        1151,
+        1152,
+        1153,
+        1154,
+        1155,
+        1156
+      ],
+      "ranking": 2,
+      "location": "1211-1217/1146-1156"
+    },
     {
-      "chain": "A",
-      "residues": [110, 111, 112, 113, 114, 115],
-      "motif_id": "KT1",
-      "description": "Kink-turn in group I intron",
-      "source": "Group I intron"
-    }
-  ],
-  "3GXA": [
+      "chain": "0",
+      "residues": [
+        936,
+        937,
+        938,
+        939,
+        940,
+        941,
+        1025,
+        1026
+      ],
+      "motif_id": "Kink-turn3",
+      "description": "Kink-turn rank 3",
+      "partner_residues": [
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030,
+        1031,
+        1032,
+        1033,
+        1034
+      ],
+      "ranking": 3,
+      "location": "936-941/1025-1034"
+    },
     {
-      "chain": "A",
-      "residues": [70, 71, 72, 73, 74, 75],
-      "motif_id": "KT1",
-      "description": "Kink-turn in tRNA",
-      "source": "tRNA"
-    }
-  ],
-  "1RNK": [
+      "chain": "0",
+      "residues": [
+        1338,
+        1339,
+        1340,
+        1341,
+        1342,
+        1343,
+        1311
+      ],
+      "motif_id": "Kink-turn4",
+      "description": "Kink-turn rank 4",
+      "partner_residues": [
+        1311,
+        1312,
+        1313,
+        1314,
+        1315,
+        1316,
+        1317,
+        1318,
+        1319
+      ],
+      "ranking": 4,
+      "location": "1338-1343/1311-1319"
+    },
     {
-      "chain": "A",
-      "residues": [85, 86, 87, 88, 89, 90],
-      "motif_id": "KT1",
-      "description": "Kink-turn in RNase P RNA",
-      "source": "RNase P RNA"
+      "chain": "0",
+      "residues": [
+        1586,
+        1587,
+        1588,
+        1589,
+        1590,
+        1591,
+        1592,
+        1593
+      ],
+      "motif_id": "Kink-turn5",
+      "description": "Kink-turn rank 5",
+      "partner_residues": [
+        1601,
+        1602,
+        1603,
+        1604,
+        1605,
+        1606,
+        1607,
+        1608,
+        1609
+      ],
+      "ranking": 5,
+      "location": "1586-1593/1601-1609"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        244,
+        245,
+        246,
+        247,
+        248,
+        249,
+        250,
+        259
+      ],
+      "motif_id": "Kink-turn6",
+      "description": "Kink-turn rank 6",
+      "partner_residues": [
+        259,
+        260,
+        261,
+        262,
+        263,
+        264,
+        265,
+        266,
+        267
+      ],
+      "ranking": 6,
+      "location": "244-250/259-267"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        2903,
+        2904,
+        2905,
+        2906,
+        2845,
+        2846,
+        2847
+      ],
+      "motif_id": "Kink-turn7",
+      "description": "Kink-turn rank 7",
+      "partner_residues": [
+        2845,
+        2846,
+        2847,
+        2848,
+        2849,
+        2850,
+        2851,
+        2852,
+        2853,
+        2854,
+        2855
+      ],
+      "ranking": 7,
+      "location": "2903-2906/2845-2855"
     }
   ]
 }

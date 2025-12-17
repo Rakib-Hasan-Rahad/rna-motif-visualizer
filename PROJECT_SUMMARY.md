@@ -28,20 +28,17 @@ All deliverables have been created and are ready for immediate use.
 | parser | `utils/parser.py` | Data parsing utilities | ✓ Complete |
 | selectors | `utils/selectors.py` | PyMOL selection management | ✓ Complete |
 
-### Motif Database (10 JSON Files)
+### Motif Database (5 JSON Files + 1 CSV)
 
-| Database | Motifs | Structures | Status |
+| Database | Motifs | Instances | Status |
 |----------|--------|-----------|--------|
-| `kturn.json` | K-turns | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `aminor.json` | A-minors | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `tetraloop_gnra.json` | GNRA tetraloops | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `kl_motif.json` | KL motifs | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `sarcin_ricin.json` | Sarcin-ricin loops | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `kink_turn.json` | Kink-turns | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `hairpin.json` | Hairpins | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `bulge.json` | Bulges | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `internal_loop.json` | Internal loops | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
-| `junction.json` | Junctions | 1S72, 2QWY, 1GID, 3GXA, 1RNK | ✓ Complete |
+| `kink_turn.json` | Kink-turns | 7 | ✓ Complete |
+| `c_loop.json` | C-loops | 4 | ✓ Complete |
+| `sarcin_ricin.json` | Sarcin-ricin loops | 13 | ✓ Complete |
+| `reverse_kink_turn.json` | Reverse kink-turns | 2 | ✓ Complete |
+| `e_loop.json` | E-loops | 10 | ✓ Complete |
+| `motifs.csv` | Source data | - | ✓ Complete |
+| **Total** | **36 instances** | **5 types** | ✓ **Complete** |
 
 ### Documentation
 
@@ -59,11 +56,14 @@ All deliverables have been created and are ready for immediate use.
 - [x] Load RNA structures from PDB ID (auto-download from RCSB)
 - [x] Load RNA structures from local files (.pdb, .cif)
 - [x] Automatically detect PDB ID from filenames
-- [x] Load motif annotations from JSON database
-- [x] Create PyMOL objects for each motif class (e.g., KTURN_ALL)
+- [x] Load motif annotations from JSON database (generated from CSV)
+- [x] Create PyMOL objects for each motif class (e.g., KINK-TURN_ALL)
 - [x] Color each motif type uniquely
 - [x] Toggle motif visibility with commands
 - [x] Show/hide all motifs of a specific type
+- [x] **NEW:** Support specific RNA chain visualization
+- [x] **NEW:** Custom background color for RNA backbone
+- [x] **NEW:** Clean visualization workflow (hide all → select chain → show cartoon → color uniformly → overlay motifs)
 
 ### ✓ Performance
 - [x] Load and visualize motifs in <3 seconds
@@ -78,9 +78,10 @@ All deliverables have been created and are ready for immediate use.
 - [x] Clear error messages and logging
 
 ### ✓ Database
-- [x] 10 motif types supported
-- [x] Pre-annotated sample data for 5 real structures
-- [x] Easy-to-extend JSON format
+- [x] 5 motif types supported (Kink-turn, C-loop, Sarcin-ricin, Reverse kink-turn, E-loop)
+- [x] Pre-annotated sample data with 36 total motif instances
+- [x] CSV source file for motif data generation
+- [x] JSON format for easy parsing and extension
 - [x] Comprehensive metadata per motif
 
 ### ✓ Code Quality
@@ -115,16 +116,12 @@ rna_motif_visualizer/
 │   ├── parser.py                  # Data parsing (250 lines)
 │   └── selectors.py               # PyMOL selection (200 lines)
 └── motif_database/
-    ├── kturn.json                 # K-turn annotations
-    ├── aminor.json                # A-minor annotations
-    ├── tetraloop_gnra.json        # GNRA annotations
-    ├── kl_motif.json              # KL motif annotations
-    ├── sarcin_ricin.json          # Sarcin-ricin annotations
-    ├── kink_turn.json             # Kink-turn annotations
-    ├── hairpin.json               # Hairpin annotations
-    ├── bulge.json                 # Bulge annotations
-    ├── internal_loop.json         # Internal loop annotations
-    └── junction.json              # Junction annotations
+    ├── kink_turn.json             # Kink-turn motifs (7 instances)
+    ├── c_loop.json                # C-loop motifs (4 instances)
+    ├── sarcin_ricin.json          # Sarcin-ricin motifs (13 instances)
+    ├── reverse_kink_turn.json     # Reverse kink-turn motifs (2 instances)
+    ├── e_loop.json                # E-loop motifs (10 instances)
+    └── motifs.csv                 # Source data for generation
 ```
 
 ---
@@ -143,7 +140,10 @@ Close and reopen PyMOL. The plugin auto-loads.
 ```python
 rna_load 1S72
 rna_status
-rna_toggle KTURN on
+rna_toggle KINK-TURN on
+
+# With custom chain and background color:
+rna_load 1S72, chain=0, bg_color=lightgray
 ```
 
 ---

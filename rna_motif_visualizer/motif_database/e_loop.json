@@ -1,0 +1,180 @@
+{
+  "RNA_STRUCTURE": [
+    {
+      "chain": "0",
+      "residues": [
+        706,
+        707,
+        708
+      ],
+      "motif_id": "E-loop1",
+      "description": "E-loop rank 1",
+      "partner_residues": [
+        720,
+        721,
+        722
+      ],
+      "ranking": 1,
+      "location": "706-708/720-722"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        1543,
+        1544,
+        1545
+      ],
+      "motif_id": "E-loop2",
+      "description": "E-loop rank 2",
+      "partner_residues": [
+        1640,
+        1641,
+        1642
+      ],
+      "ranking": 2,
+      "location": "1543-1545/1640-1642"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        174,
+        175,
+        176
+      ],
+      "motif_id": "E-loop3",
+      "description": "E-loop rank 3",
+      "partner_residues": [
+        159,
+        160,
+        161
+      ],
+      "ranking": 3,
+      "location": "174-177/159-161"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        663,
+        664,
+        665,
+        666
+      ],
+      "motif_id": "E-loop4",
+      "description": "E-loop rank 4",
+      "partner_residues": [
+        680,
+        681,
+        682,
+        683
+      ],
+      "ranking": 4,
+      "location": "663-666/680-683"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        586,
+        587,
+        588,
+        589
+      ],
+      "motif_id": "E-loop5",
+      "description": "E-loop rank 5",
+      "partner_residues": [
+        568,
+        569,
+        570,
+        571
+      ],
+      "ranking": 5,
+      "location": "586-590/568-571"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        356,
+        357,
+        358,
+        359
+      ],
+      "motif_id": "E-loop6",
+      "description": "E-loop rank 6",
+      "partner_residues": [
+        292,
+        293,
+        294,
+        295
+      ],
+      "ranking": 6,
+      "location": "356-360/292-295"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        2691,
+        2692,
+        2693
+      ],
+      "motif_id": "E-loop7",
+      "description": "E-loop rank 7",
+      "partner_residues": [
+        2701,
+        2702,
+        2703
+      ],
+      "ranking": 7,
+      "location": "2691-2694/2701-2703"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        1369,
+        1370,
+        1371
+      ],
+      "motif_id": "E-loop8",
+      "description": "E-loop rank 8",
+      "partner_residues": [
+        2053,
+        2054,
+        2055
+      ],
+      "ranking": 8,
+      "location": "1369-1372/2053-2055"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        463,
+        464,
+        465
+      ],
+      "motif_id": "E-loop9",
+      "description": "E-loop rank 9",
+      "partner_residues": [
+        475,
+        476,
+        477
+      ],
+      "ranking": 9,
+      "location": "463-466/475-477"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        380,
+        381,
+        382
+      ],
+      "motif_id": "E-loop10",
+      "description": "E-loop rank 10",
+      "partner_residues": [
+        406,
+        407,
+        408
+      ],
+      "ranking": 10,
+      "location": "380-383/406-408"
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "RNA_STRUCTURE": [
+    {
+      "chain": "0",
+      "residues": [
+        1436,
+        1437,
+        1438,
+        1439,
+        1440,
+        1424
+      ],
+      "motif_id": "C-loop1",
+      "description": "C-loop rank 1",
+      "partner_residues": [
+        1424,
+        1425,
+        1426,
+        1427,
+        1428,
+        1429,
+        1430
+      ],
+      "ranking": 1,
+      "location": "1436-1440/1424-1430"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        2760,
+        2761,
+        2762,
+        2763,
+        2764,
+        2716
+      ],
+      "motif_id": "C-loop2",
+      "description": "C-loop rank 2",
+      "partner_residues": [
+        2716,
+        2717,
+        2718,
+        2719,
+        2720,
+        2721,
+        2722
+      ],
+      "ranking": 2,
+      "location": "2760-2764/2716-2722"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        1939,
+        1940,
+        1941,
+        1942,
+        1943,
+        1944,
+        1945
+      ],
+      "motif_id": "C-loop3",
+      "description": "C-loop rank 3",
+      "partner_residues": [
+        1892,
+        1893,
+        1894,
+        1895,
+        1896,
+        1897,
+        1898
+      ],
+      "ranking": 3,
+      "location": "1939-1945/1892-1898"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        957
+      ],
+      "motif_id": "C-loop4",
+      "description": "C-loop rank 4",
+      "partner_residues": [
+        957,
+        958,
+        959,
+        960,
+        961,
+        962,
+        963,
+        964
+      ],
+      "ranking": 4,
+      "location": "1004-1009/957-964"
+    }
+  ]
+}

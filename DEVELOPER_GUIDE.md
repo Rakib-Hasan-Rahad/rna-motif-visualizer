@@ -46,8 +46,8 @@ class MotifVisualizerGUI:
     def __init__(self):
         """Initialize GUI components."""
     
-    def load_structure_action(self, pdb_id_or_path: str) -> None:
-        """Load structure and visualize motifs."""
+    def load_structure_action(self, pdb_id_or_path: str, chain: str = '0', background_color: str = None) -> None:
+        """Load structure and visualize motifs on specified chain."""
     
     def toggle_motif_action(self, motif_type: str, visible: bool) -> None:
         """Toggle visibility of a motif type."""
@@ -63,7 +63,7 @@ class MotifVisualizerGUI:
 ```
 
 **Registered PyMOL Commands:**
-- `rna_load(pdb_id_or_path)` - Load structure
+- `rna_load(pdb_id_or_path, chain='0', bg_color=None)` - Load structure with optional chain and background color
 - `rna_toggle(motif_type, visible)` - Toggle visibility
 - `rna_status()` - Show status
 
@@ -122,12 +122,23 @@ class VisualizationManager:
     def __init__(self, cmd, database_dir: str):
         """Initialize visualization manager."""
     
-    def load_and_visualize(self, pdb_id_or_path: str) -> dict:
-        """Complete workflow: load structure and visualize motifs."""
+    def setup_clean_visualization(self, structure_name: str, chain: str = '0', 
+                                  background_color: str = None) -> None:
+        """Set up clean RNA visualization: hide all, select chain, show cartoon, color uniformly."""
+    
+    def load_and_visualize(self, pdb_id_or_path: str, chain: str = '0', 
+                          background_color: str = None) -> dict:
+        """Complete workflow: load structure and visualize motifs on specified chain."""
     
     def get_structure_info(self) -> dict:
         """Get current structure and motif info."""
 ```
+
+**Key Features:**
+- Implements clean PyMOL visualization workflow
+- Supports custom chain selection
+- Allows custom background color for RNA backbone
+- Overlays motifs with distinct colors on neutral background
 
 ---
 

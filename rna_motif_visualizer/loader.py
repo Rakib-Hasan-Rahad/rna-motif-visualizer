@@ -220,27 +220,60 @@ class VisualizationManager:
         self.motif_loader = MotifLoader(cmd, database_dir)
         self.logger = get_logger()
     
-    def color_non_motif_residues(self, structure_name):
+    def setup_clean_visualization(self, structure_name, chain='0', background_color=None):
         """
-        Color non-motif residues with a neutral color for contrast.
+        Set up clean RNA visualization with uniform color.
+        Hide everything, select chain, show cartoon, and color uniformly.
         
         Args:
             structure_name (str): Name of structure in PyMOL
+            chain (str): Chain identifier to visualize (default: '0')
+            background_color (str): Color for the RNA (default: 'gray80')
         """
         try:
-            # Color the entire structure with the configured background color
-            background_color = colors.NON_MOTIF_COLOR
-            self.cmd.color(background_color, structure_name)
-            self.logger.info(f"Colored structure with {background_color} for motif contrast")
+            if background_color is None:
+                background_color = colors.NON_MOTIF_COLOR or 'gray80'
+            
+            # Hide everything first
+            self.cmd.hide('everything', 'all')
+            self.logger.debug("Hidden all objects")
+            
+            # Select RNA chain
+            rna_selection = f"rna_{chain}"
+            self.cmd.select(rna_selection, f"{structure_name} and chain {chain} and polymer.nucleic")
+            self.logger.debug(f"Selected RNA chain {chain}: {rna_selection}")
+            
+            # Show cartoon representation
+            self.cmd.show('cartoon', rna_selection)
+            self.logger.debug("Showed cartoon representation")
+            
+            # Set cartoon nucleic acid mode
+            self.cmd.set('cartoon_nucleic_acid_mode', 1, rna_selection)
+            
+            # Color uniformly
+            self.cmd.color(background_color, rna_selection)
+            self.logger.info(f"Visualization setup: Chain {chain} shown as {background_color} cartoon")
+            
+            # Clean up temporary selection
+            self.cmd.delete(rna_selection)
+            
         except Exception as e:
-            self.logger.error(f"Failed to color non-motif residues: {e}")
+            self.logger.error(f"Failed to set up clean visualization: {e}")
     
-    def load_and_visualize(self, pdb_id_or_path):
+    def load_and_visualize(self, pdb_id_or_path, chain='0', background_color=None):
         """
         Complete workflow: load structure and visualize motifs.
         
+        1. Load structure
+        2. Hide everything
+        3. Select RNA chain
+        4. Show cartoon with uniform color
+        5. Overlay motifs with distinct colors
+        
         Args:
             pdb_id_or_path (str): PDB ID or file path
+            chain (str): Chain identifier to visualize (default: '0')
+            background_color (str): Color for RNA backbone (default: 'gray80')
         
         Returns:
             dict: Loaded motifs, or empty dict if failed
@@ -252,10 +285,10 @@ class VisualizationManager:
         
         pdb_id = self.structure_loader.get_current_pdb_id()
         
-        # Color non-motif residues with neutral color for contrast
-        self.color_non_motif_residues(structure_name)
+        # Set up clean visualization with uniform color
+        self.setup_clean_visualization(structure_name, chain, background_color)
         
-        # Load motifs (these will override the gray color with motif colors)
+        # Load motifs (these will overlay on the uniform backbone with distinct colors)
         motifs = self.motif_loader.load_motifs(structure_name, pdb_id)
         return motifs
     

@@ -84,17 +84,12 @@ RNA MOTIF VISUALIZER - STATUS
 Structure: 1S72
 PDB ID: 1S72
 
-Loaded Motifs (10):
-  KTURN                 ( 2 instances) ✓ visible
-  AMINOR                ( 2 instances) ✓ visible
-  GNRA                  ( 2 instances) ✓ visible
-  KL_MOTIF              ( 1 instances) ✓ visible
-  SARCIN_RICIN          ( 1 instances) ✓ visible
-  KINK_TURN             ( 1 instances) ✓ visible
-  HAIRPIN               ( 2 instances) ✓ visible
-  BULGE                 ( 2 instances) ✓ visible
-  INTERNAL_LOOP         ( 2 instances) ✓ visible
-  JUNCTION              ( 2 instances) ✓ visible
+Loaded Motifs (5):
+  KINK-TURN             ( 7 instances) ✓ visible
+  C-LOOP                ( 4 instances) ✓ visible
+  SARCIN-RICIN          (13 instances) ✓ visible
+  REVERSE-KINK-TURN     ( 2 instances) ✓ visible
+  E-LOOP                (10 instances) ✓ visible
 ============================================================
 ```
 

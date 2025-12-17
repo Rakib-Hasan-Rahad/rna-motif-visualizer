@@ -1,0 +1,68 @@
+{
+  "RNA_STRUCTURE": [
+    {
+      "chain": "0",
+      "residues": [
+        1661,
+        1662,
+        1663,
+        1664,
+        1665,
+        1666,
+        1520,
+        1521
+      ],
+      "motif_id": "Reverse_kink-turn1",
+      "description": "Reverse kink-turn rank 1",
+      "partner_residues": [
+        1520,
+        1521,
+        1522,
+        1523,
+        1524,
+        1525,
+        1526,
+        1527,
+        1528,
+        1529,
+        1530
+      ],
+      "ranking": 1,
+      "location": "1661-1666/1520-1530"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        1530,
+        1531,
+        1532,
+        1533,
+        1534,
+        1535,
+        1536,
+        1649,
+        1650,
+        1651
+      ],
+      "motif_id": "Reverse_kink-turn2",
+      "description": "Reverse kink-turn rank 2",
+      "partner_residues": [
+        1649,
+        1650,
+        1651,
+        1652,
+        1653,
+        1654,
+        1655,
+        1656,
+        1657,
+        1658,
+        1659,
+        1660,
+        1661
+      ],
+      "ranking": 2,
+      "location": "1530-1536/1649-1661"
+    }
+  ]
+}

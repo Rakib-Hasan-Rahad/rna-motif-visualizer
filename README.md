@@ -7,11 +7,12 @@
 This is a **complete, ready-to-use PyMOL plugin** that enables researchers to:
 
 ✅ Load RNA structures (PDB ID or local file)  
-✅ Automatically visualize 10 different RNA motif types  
+✅ Automatically visualize 5 different RNA motif types  
 ✅ Color-code each motif class uniquely  
 ✅ Toggle motif visibility with one command  
 ✅ Work with NO external tools required (no FR3D, no DSSR)  
 ✅ Visualize motifs in under 3 seconds  
+✅ Focus on specific RNA chains with custom colors  
 
 ---
 
@@ -32,16 +33,12 @@ rna_motif_visualizer/          # Main plugin package
 │   ├── parser.py             # Data parsing (250 lines)
 │   └── selectors.py          # PyMOL selection (200 lines)
 └── motif_database/
-    ├── kturn.json            # K-turn motifs
-    ├── aminor.json           # A-minor motifs
-    ├── tetraloop_gnra.json   # GNRA tetraloops
-    ├── kl_motif.json         # KL motifs
-    ├── sarcin_ricin.json     # Sarcin-ricin loops
-    ├── kink_turn.json        # Kink-turn motifs
-    ├── hairpin.json          # Hairpin structures
-    ├── bulge.json            # Bulge loops
-    ├── internal_loop.json    # Internal loops
-    └── junction.json         # RNA junctions
+    ├── kink_turn.json        # Kink-turn motifs (7 instances)
+    ├── c_loop.json           # C-loop motifs (4 instances)
+    ├── sarcin_ricin.json     # Sarcin-ricin loops (13 instances)
+    ├── reverse_kink_turn.json # Reverse kink-turn motifs (2 instances)
+    ├── e_loop.json           # E-loop motifs (10 instances)
+    └── motifs.csv            # Source data for motif generation
 ```
 
 ### Documentation Files
@@ -73,10 +70,13 @@ Ready to visualize RNA structural motifs!
 ### Step 3: Use It!
 ```python
 # In PyMOL console:
-rna_load 1S72           # Load structure
-rna_status              # See loaded motifs
-rna_toggle KTURN on     # Show K-turns (red)
-rna_toggle GNRA on      # Show GNRA (yellow)
+rna_load 1S72                                    # Load structure
+rna_status                                       # See loaded motifs
+rna_toggle KINK-TURN on                          # Show Kink-turns (red)
+rna_toggle SARCIN-RICIN on                       # Show Sarcin-ricin (green)
+
+# Load with custom chain and background color:
+rna_load 1S72, chain=0, bg_color=lightgray
 ```
 
 **Done!** 🎉
@@ -99,18 +99,13 @@ rna_toggle GNRA on      # Show GNRA (yellow)
 
 ## 🎨 Supported Motif Types
 
-| Motif | Color | Command | Notes |
-|-------|-------|---------|-------|
-| K-turn | 🔴 Red | `rna_toggle KTURN on` | ~30° kink |
-| A-minor | 🔵 Cyan | `rna_toggle AMINOR on` | Minor groove |
-| GNRA tetraloop | 🟡 Yellow | `rna_toggle GNRA on` | 4-nt hairpin |
-| KL motif | 🟣 Magenta | `rna_toggle KL_MOTIF on` | Kink-loop |
-| Sarcin-ricin loop | 🟢 Green | `rna_toggle SARCIN_RICIN on` | Conserved |
-| Kink-turn | 🟠 Orange | `rna_toggle KINK_TURN on` | K-turn variant |
-| Hairpin | 🟢 Lime | `rna_toggle HAIRPIN on` | Stem-loop |
-| Bulge | 🔴 Pink | `rna_toggle BULGE on` | Internal bulge |
-| Internal loop | 🔵 Light Blue | `rna_toggle INTERNAL_LOOP on` | Loop region |
-| Junction | 🟡 Gold | `rna_toggle JUNCTION on` | Multi-helix |
+| Motif | Color | Command | Instances | Notes |
+|-------|-------|---------|-----------|-------|
+| Kink-turn | 🔴 Red | `rna_toggle KINK-TURN on` | 7 | RNA structural kink |
+| C-loop | 🟡 Yellow | `rna_toggle C-LOOP on` | 4 | C-shaped loop structure |
+| Sarcin-ricin | 🟢 Green | `rna_toggle SARCIN-RICIN on` | 13 | Conserved motif |
+| Reverse kink-turn | 🔵 Cyan | `rna_toggle REVERSE-KINK-TURN on` | 2 | Inverted kink geometry |
+| E-loop | 🟣 Magenta | `rna_toggle E-LOOP on` | 10 | E-shaped loop |
 
 ---
 
@@ -151,28 +146,28 @@ rna_toggle GNRA on      # Show GNRA (yellow)
 
 ### Example 1: Basic Visualization
 ```python
-# Load ribosomal RNA structure
+# Load RNA structure
 rna_load 1S72
 
 # See what motifs are available
 rna_status
 
-# Show K-turns in red
-rna_toggle KTURN on
+# Show Kink-turns in red
+rna_toggle KINK-TURN on
 ```
 
-### Example 2: Highlight Specific Motifs
+### Example 2: Highlight Specific Motifs with Custom Visualization
 ```python
-# Load structure
-rna_load 1GID
+# Load structure with chain 0 and light gray background
+rna_load 1S72, chain=0, bg_color=lightgray
 
-# Show ONLY GNRA tetraloops (hide everything else)
-rna_toggle GNRA on
-rna_toggle KTURN off
-rna_toggle AMINOR off
+# Show ONLY Sarcin-ricin motifs (hide everything else)
+rna_toggle SARCIN-RICIN on
+rna_toggle KINK-TURN off
+rna_toggle C-LOOP off
 
 # Zoom to focus on the motif
-zoom GNRA_ALL
+zoom SARCIN-RICIN_ALL
 ```
 
 ### Example 3: Load Local File
@@ -190,7 +185,7 @@ rna_load C:\Users\YourName\Downloads\structure.cif
 
 ```python
 # Load a structure
-rna_load <PDB_ID_or_PATH>
+rna_load <PDB_ID_or_PATH> [, chain=<CHAIN>, bg_color=<COLOR>]
 
 # Toggle motif visibility
 rna_toggle <MOTIF_TYPE> <on|off>
@@ -200,8 +195,9 @@ rna_status
 
 # Examples:
 rna_load 1S72
-rna_toggle KTURN on
-rna_toggle AMINOR off
+rna_load ~/structure.pdb, chain=A, bg_color=gray80
+rna_toggle KINK-TURN on
+rna_toggle SARCIN-RICIN off
 rna_status
 ```
 
@@ -209,11 +205,16 @@ rna_status
 
 ## 📊 Pre-Loaded Database
 
-The plugin comes with **10 JSON files** containing motif annotations:
+The plugin comes with **5 JSON files** containing motif annotations:
 
-- **5 real PDB structures** included: 1S72, 2QWY, 1GID, 3GXA, 1RNK
-- **50+ motif instances** ready to visualize
-- **10 motif types** with full color support
+- **Comprehensive RNA motif data** from CSV source
+- **36 total motif instances** ready to visualize:
+  - 7 Kink-turns
+  - 4 C-loops
+  - 13 Sarcin-ricin motifs
+  - 2 Reverse kink-turns
+  - 10 E-loops
+- **5 motif types** with full color support
 
 Easy to extend with your own motifs!
 
@@ -234,11 +235,11 @@ Easy to extend with your own motifs!
 
 | Component | Files | Lines of Code |
 |-----------|-------|---------------|
-| Core Plugin | 5 | 810 |
+| Core Plugin | 5 | 850 |
 | Utilities | 3 | 630 |
-| Database | 10 | ~500 |
-| Documentation | 4 | ~1,800 |
-| **Total** | **22** | **~3,700** |
+| Database | 5 JSON + 1 CSV | ~300 |
+| Documentation | 5 | ~1,900 |
+| **Total** | **19** | **~3,780** |
 
 ---
 

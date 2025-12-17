@@ -1,52 +1,256 @@
 {
-  "1S72": [
+  "RNA_STRUCTURE": [
     {
-      "chain": "A",
-      "residues": [175, 176, 177, 178, 179, 180, 181],
-      "motif_id": "SR1",
-      "description": "Sarcin-ricin loop - highly conserved",
-      "structural_features": ["major groove", "unusual geometry"],
-      "source": "23S rRNA"
-    }
-  ],
-  "2QWY": [
+      "chain": "0",
+      "residues": [
+        211,
+        212,
+        213,
+        214
+      ],
+      "motif_id": "Sarcin-ricin1",
+      "description": "Sarcin-ricin rank 1",
+      "partner_residues": [
+        225,
+        226,
+        227,
+        228
+      ],
+      "ranking": 1,
+      "location": "211-215/225-228"
+    },
     {
-      "chain": "A",
-      "residues": [85, 86, 87, 88, 89, 90, 91],
-      "motif_id": "SR1",
-      "description": "Sarcin-ricin loop in ribozyme",
-      "structural_features": ["hairpin"],
-      "source": "Hammerhead ribozyme"
-    }
-  ],
-  "1GID": [
+      "chain": "0",
+      "residues": [
+        1368,
+        1369,
+        1370,
+        1371
+      ],
+      "motif_id": "Sarcin-ricin2",
+      "description": "Sarcin-ricin rank 2",
+      "partner_residues": [
+        2053,
+        2054,
+        2055,
+        2056
+      ],
+      "ranking": 2,
+      "location": "1368-1372/2053-2056"
+    },
     {
-      "chain": "A",
-      "residues": [95, 96, 97, 98, 99, 100, 101],
-      "motif_id": "SR1",
-      "description": "Sarcin-ricin loop in group I intron",
-      "structural_features": ["loop region"],
-      "source": "Group I intron"
-    }
-  ],
-  "3GXA": [
+      "chain": "0",
+      "residues": [
+        2690,
+        2691,
+        2692,
+        2693
+      ],
+      "motif_id": "Sarcin-ricin3",
+      "description": "Sarcin-ricin rank 3",
+      "partner_residues": [
+        2701,
+        2702,
+        2703,
+        2704
+      ],
+      "ranking": 3,
+      "location": "2690-2694/2701-2704"
+    },
     {
-      "chain": "A",
-      "residues": [50, 51, 52, 53, 54, 55, 56],
-      "motif_id": "SR1",
-      "description": "Sarcin-ricin loop in tRNA",
-      "structural_features": ["variable loop"],
-      "source": "tRNA"
-    }
-  ],
-  "1RNK": [
+      "chain": "9",
+      "residues": [
+        76,
+        77,
+        78,
+        79
+      ],
+      "motif_id": "Sarcin-ricin4",
+      "description": "Sarcin-ricin rank 4",
+      "partner_residues": [
+        102,
+        103,
+        104,
+        105
+      ],
+      "ranking": 4,
+      "location": "76-80/102-105"
+    },
     {
-      "chain": "A",
-      "residues": [60, 61, 62, 63, 64, 65, 66],
-      "motif_id": "SR1",
-      "description": "Sarcin-ricin loop in RNase P RNA",
-      "structural_features": ["conserved motif"],
-      "source": "RNase P RNA"
+      "chain": "0",
+      "residues": [
+        461,
+        462,
+        463,
+        464,
+        465
+      ],
+      "motif_id": "Sarcin-ricin5",
+      "description": "Sarcin-ricin rank 5",
+      "partner_residues": [
+        475,
+        476,
+        477,
+        478
+      ],
+      "ranking": 5,
+      "location": "461-466/475-478"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        380,
+        381,
+        382
+      ],
+      "motif_id": "Sarcin-ricin6",
+      "description": "Sarcin-ricin rank 6",
+      "partner_residues": [
+        406,
+        407,
+        408
+      ],
+      "ranking": 6,
+      "location": "380-383/406-408"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        951,
+        952,
+        953,
+        954,
+        955
+      ],
+      "motif_id": "Sarcin-ricin7",
+      "description": "Sarcin-ricin rank 7",
+      "partner_residues": [
+        1012,
+        1013,
+        1014,
+        1015,
+        1016
+      ],
+      "ranking": 7,
+      "location": "951-955/1012-1016"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        173,
+        174,
+        175,
+        176
+      ],
+      "motif_id": "Sarcin-ricin8",
+      "description": "Sarcin-ricin rank 8",
+      "partner_residues": [
+        159,
+        160,
+        161,
+        162
+      ],
+      "ranking": 8,
+      "location": "173-177/159-162"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        2090,
+        2091,
+        2092,
+        2093
+      ],
+      "motif_id": "Sarcin-ricin9",
+      "description": "Sarcin-ricin rank 9",
+      "partner_residues": [
+        2651,
+        2652,
+        2653,
+        2654
+      ],
+      "ranking": 9,
+      "location": "2090-2094/2651-2654"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        1775,
+        1776,
+        1777,
+        1778
+      ],
+      "motif_id": "Sarcin-ricin10",
+      "description": "Sarcin-ricin rank 10",
+      "partner_residues": [
+        1765,
+        1766,
+        1767,
+        1768
+      ],
+      "ranking": 10,
+      "location": "1775-1779/1765-1768"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        1542,
+        1543,
+        1544,
+        1545
+      ],
+      "motif_id": "Sarcin-ricin11",
+      "description": "Sarcin-ricin rank 11",
+      "partner_residues": [
+        1640,
+        1641,
+        1642,
+        1643
+      ],
+      "ranking": 11,
+      "location": "1542-1545/1640-1643"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        585,
+        586,
+        587,
+        588,
+        589
+      ],
+      "motif_id": "Sarcin-ricin12",
+      "description": "Sarcin-ricin rank 12",
+      "partner_residues": [
+        568,
+        569,
+        570,
+        571,
+        572
+      ],
+      "ranking": 12,
+      "location": "585-590/568-572"
+    },
+    {
+      "chain": "0",
+      "residues": [
+        355,
+        356,
+        357,
+        358,
+        359
+      ],
+      "motif_id": "Sarcin-ricin13",
+      "description": "Sarcin-ricin rank 13",
+      "partner_residues": [
+        292,
+        293,
+        294,
+        295,
+        296
+      ],
+      "ranking": 13,
+      "location": "355-360/292-296"
     }
   ]
 }

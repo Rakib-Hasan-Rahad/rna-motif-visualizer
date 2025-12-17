@@ -25,65 +25,60 @@ rna_load C:\Users\YourName\Downloads\structure.cif
 
 ## Showing/Hiding Specific Motifs
 
-### Show Only K-Turns
+### Show Only Kink-turns
 ```python
 rna_load 1S72
-rna_toggle KTURN on
-rna_toggle AMINOR off
-rna_toggle GNRA off
-rna_toggle KL_MOTIF off
-rna_toggle SARCIN_RICIN off
-rna_toggle KINK_TURN off
-rna_toggle HAIRPIN off
-rna_toggle BULGE off
-rna_toggle INTERNAL_LOOP off
-rna_toggle JUNCTION off
+rna_toggle KINK-TURN on
+rna_toggle C-LOOP off
+rna_toggle SARCIN-RICIN off
+rna_toggle REVERSE-KINK-TURN off
+rna_toggle E-LOOP off
 ```
 
-### Show Only GNRA Tetraloops
+### Show Only Sarcin-ricin Motifs
 ```python
 rna_load 1S72
-rna_toggle GNRA on
-rna_toggle KTURN off
-rna_toggle AMINOR off
+rna_toggle SARCIN-RICIN on
+rna_toggle KINK-TURN off
+rna_toggle C-LOOP off
 ```
 
-### Show K-Turns and A-Minors Together
+### Show Kink-turns and C-loops Together
 ```python
 rna_load 1S72
-rna_toggle KTURN on
-rna_toggle AMINOR on
-rna_toggle GNRA off
-rna_toggle KL_MOTIF off
-rna_toggle SARCIN_RICIN off
+rna_toggle KINK-TURN on
+rna_toggle C-LOOP on
+rna_toggle SARCIN-RICIN off
+rna_toggle REVERSE-KINK-TURN off
+rna_toggle E-LOOP off
 ```
 
 ---
 
 ## Zooming and Highlighting
 
-### Zoom to K-Turns
+### Zoom to Kink-turns
 ```python
 rna_load 1S72
-rna_toggle KTURN on
-select kturn_only, KTURN_ALL
-zoom kturn_only
+rna_toggle KINK-TURN on
+select kinkturn_only, KINK-TURN_ALL
+zoom kinkturn_only
 ```
 
-### Zoom to GNRA Tetraloops
+### Zoom to Sarcin-ricin Motifs
 ```python
 rna_load 1S72
-rna_toggle GNRA on
-select gnra_only, GNRA_ALL
-zoom gnra_only
+rna_toggle SARCIN-RICIN on
+select sarcin_only, SARCIN-RICIN_ALL
+zoom sarcin_only
 ```
 
-### Highlight A-Minors with Increased Stick Size
+### Highlight E-loops with Increased Stick Size
 ```python
 rna_load 1S72
-rna_toggle AMINOR on
-show sticks, AMINOR_ALL
-set stick_radius, 0.3, AMINOR_ALL
+rna_toggle E-LOOP on
+show sticks, E-LOOP_ALL
+set stick_radius, 0.3, E-LOOP_ALL
 ```
 
 ---
@@ -92,30 +87,30 @@ set stick_radius, 0.3, AMINOR_ALL
 
 ### Show as Cartoon (Secondary Structure)
 ```python
-rna_load 1S72
+rna_load 1S72, chain=0, bg_color=gray80
 hide everything
 show cartoon
-rna_toggle KTURN on
-show sticks, KTURN_ALL
-color red, KTURN_ALL
+rna_toggle KINK-TURN on
+show sticks, KINK-TURN_ALL
+color red, KINK-TURN_ALL
 ```
 
 ### Show as Sticks and Cartoon
 ```python
-rna_load 1S72
+rna_load 1S72, chain=0, bg_color=gray80
 show cartoon
 show sticks
-rna_toggle GNRA on
-color yellow, GNRA_ALL
+rna_toggle SARCIN-RICIN on
+color green, SARCIN-RICIN_ALL
 ```
 
 ### Show Structure with Surface
 ```python
-rna_load 1S72
+rna_load 1S72, chain=0, bg_color=lightgray
 show cartoon
 show surface
-rna_toggle KTURN on
-show sticks, KTURN_ALL
+rna_toggle KINK-TURN on
+show sticks, KINK-TURN_ALL
 set transparency, 0.7
 ```
 
@@ -154,27 +149,27 @@ rna_status
 ### Select Individual Motif Type
 ```python
 rna_load 1S72
-select my_kturn, KTURN_ALL
-color red, my_kturn
+select my_motif, KINK-TURN_ALL
+color red, my_motif
 ```
 
 ### Create Sub-Selection of One Motif
 ```python
 rna_load 1S72
 # Create custom selection for specific residues
-select kturn_resi77_82, chain A and resi 77-82
-color orange, kturn_resi77_82
+select motif_resi, chain 0 and resi 77-82
+color orange, motif_resi
 ```
 
 ### Hide Background, Show Only One Motif
 ```python
-rna_load 1S72
+rna_load 1S72, chain=0, bg_color=gray80
 hide everything
-rna_toggle KTURN on
-show sticks, KTURN_ALL
-show cartoon, KTURN_ALL
-center KTURN_ALL
-zoom KTURN_ALL
+rna_toggle SARCIN-RICIN on
+show sticks, SARCIN-RICIN_ALL
+show cartoon, SARCIN-RICIN_ALL
+center SARCIN-RICIN_ALL
+zoom SARCIN-RICIN_ALL
 ```
 
 ---
@@ -184,20 +179,20 @@ zoom KTURN_ALL
 ### Change Motif Color
 ```python
 rna_load 1S72
-# Change K-turn color to orange
-rna_toggle KTURN on
-color orange, KTURN_ALL
+# Change Kink-turn color to orange
+rna_toggle KINK-TURN on
+color orange, KINK-TURN_ALL
 ```
 
 ### Rainbow Colors for Multiple Motifs
 ```python
 rna_load 1S72
-rna_toggle KTURN on
-rna_toggle AMINOR on
-rna_toggle GNRA on
-color red, KTURN_ALL
-color blue, AMINOR_ALL
-color yellow, GNRA_ALL
+rna_toggle KINK-TURN on
+rna_toggle C-LOOP on
+rna_toggle E-LOOP on
+color red, KINK-TURN_ALL
+color yellow, C-LOOP_ALL
+color magenta, E-LOOP_ALL
 ```
 
 ---
