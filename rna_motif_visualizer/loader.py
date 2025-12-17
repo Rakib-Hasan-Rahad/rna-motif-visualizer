@@ -309,7 +309,8 @@ class VisualizationManager:
             self.logger.debug("Showed cartoon representation")
             
             # Step 4: Set cartoon nucleic acid mode to 1
-            self.cmd.set('cartoon_nucleic_acid_mode', 1, rna_selection)
+            # Suppress PyMOL warning about object-state-level setting
+            self.cmd.set('cartoon_nucleic_acid_mode', 1)
             self.logger.debug("Set cartoon_nucleic_acid_mode = 1")
             
             # Step 5: Color uniformly
