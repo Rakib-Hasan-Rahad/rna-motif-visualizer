@@ -220,59 +220,68 @@ class VisualizationManager:
         self.motif_loader = MotifLoader(cmd, database_dir)
         self.logger = get_logger()
     
-    def setup_clean_visualization(self, structure_name, chain='0', background_color=None):
+    def setup_clean_visualization(self, structure_name, background_color=None):
         """
         Set up clean RNA visualization with uniform color.
-        Hide everything, select chain, show cartoon, and color uniformly.
+        Automatically displays all RNA chains with all motifs overlaid.
+        
+        Workflow:
+        1. Hide everything
+        2. Select all polymer.nucleic (all RNA chains)
+        3. Show cartoon representation
+        4. Set cartoon nucleic acid mode
+        5. Color uniformly with background_color
+        6. Motifs overlay on top with distinct colors
         
         Args:
             structure_name (str): Name of structure in PyMOL
-            chain (str): Chain identifier to visualize (default: '0')
             background_color (str): Color for the RNA (default: 'gray80')
         """
         try:
             if background_color is None:
                 background_color = colors.NON_MOTIF_COLOR or 'gray80'
             
-            # Hide everything first
+            # Step 1: Hide everything first
             self.cmd.hide('everything', 'all')
             self.logger.debug("Hidden all objects")
             
-            # Select RNA chain
-            rna_selection = f"rna_{chain}"
-            self.cmd.select(rna_selection, f"{structure_name} and chain {chain} and polymer.nucleic")
-            self.logger.debug(f"Selected RNA chain {chain}: {rna_selection}")
+            # Step 2: Select ALL polymer.nucleic (all RNA chains in structure)
+            rna_selection = f"{structure_name}_rna"
+            self.cmd.select(rna_selection, f"{structure_name} and polymer.nucleic")
+            self.logger.debug(f"Selected all RNA chains: {rna_selection}")
             
-            # Show cartoon representation
+            # Step 3: Show cartoon representation
             self.cmd.show('cartoon', rna_selection)
             self.logger.debug("Showed cartoon representation")
             
-            # Set cartoon nucleic acid mode
+            # Step 4: Set cartoon nucleic acid mode to 1
             self.cmd.set('cartoon_nucleic_acid_mode', 1, rna_selection)
+            self.logger.debug("Set cartoon_nucleic_acid_mode = 1")
             
-            # Color uniformly
+            # Step 5: Color uniformly
             self.cmd.color(background_color, rna_selection)
-            self.logger.info(f"Visualization setup: Chain {chain} shown as {background_color} cartoon")
+            self.logger.info(f"Visualization setup: All RNA shown as {background_color} cartoon")
             
-            # Clean up temporary selection
+            # Step 6: Clean up temporary selection (motifs will be shown on top)
             self.cmd.delete(rna_selection)
             
         except Exception as e:
             self.logger.error(f"Failed to set up clean visualization: {e}")
     
-    def load_and_visualize(self, pdb_id_or_path, chain='0', background_color=None):
+    def load_and_visualize(self, pdb_id_or_path, background_color=None):
         """
-        Complete workflow: load structure and visualize motifs.
+        Complete workflow: load structure and automatically visualize all motifs.
         
+        Automated workflow:
         1. Load structure
         2. Hide everything
-        3. Select RNA chain
-        4. Show cartoon with uniform color
-        5. Overlay motifs with distinct colors
+        3. Select all polymer.nucleic chains
+        4. Show cartoon with cartoon_nucleic_acid_mode = 1
+        5. Color uniformly with background_color (default: gray80)
+        6. Automatically load and overlay all motifs with distinct colors
         
         Args:
             pdb_id_or_path (str): PDB ID or file path
-            chain (str): Chain identifier to visualize (default: '0')
             background_color (str): Color for RNA backbone (default: 'gray80')
         
         Returns:
@@ -285,10 +294,10 @@ class VisualizationManager:
         
         pdb_id = self.structure_loader.get_current_pdb_id()
         
-        # Set up clean visualization with uniform color
-        self.setup_clean_visualization(structure_name, chain, background_color)
+        # Set up clean visualization with uniform color for all RNA chains
+        self.setup_clean_visualization(structure_name, background_color)
         
-        # Load motifs (these will overlay on the uniform backbone with distinct colors)
+        # Load motifs - they automatically overlay on the uniform backbone with distinct colors
         motifs = self.motif_loader.load_motifs(structure_name, pdb_id)
         return motifs
     

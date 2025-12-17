@@ -7,12 +7,13 @@
 This is a **complete, ready-to-use PyMOL plugin** that enables researchers to:
 
 ✅ Load RNA structures (PDB ID or local file)  
-✅ Automatically visualize 5 different RNA motif types  
-✅ Color-code each motif class uniquely  
+✅ **Automatically visualize ALL motifs on load**  
+✅ Display all RNA chains uniformly (gray80 by default)  
+✅ Color-code each motif type uniquely  
 ✅ Toggle motif visibility with one command  
 ✅ Work with NO external tools required (no FR3D, no DSSR)  
 ✅ Visualize motifs in under 3 seconds  
-✅ Focus on specific RNA chains with custom colors  
+✅ Customize RNA background color  
 
 ---
 
@@ -70,13 +71,17 @@ Ready to visualize RNA structural motifs!
 ### Step 3: Use It!
 ```python
 # In PyMOL console:
-rna_load 1S72                                    # Load structure
-rna_status                                       # See loaded motifs
-rna_toggle KINK-TURN on                          # Show Kink-turns (red)
-rna_toggle SARCIN-RICIN on                       # Show Sarcin-ricin (green)
+rna_load 1S72                                    # Load structure - automatically visualizes all motifs!
 
-# Load with custom chain and background color:
-rna_load 1S72, chain=0, bg_color=lightgray
+# Optional: Change background color
+rna_load 1S72, bg_color=lightgray
+
+# See what motifs are visible
+rna_status
+
+# Toggle motif visibility
+rna_toggle KINK-TURN off                         # Hide Kink-turns
+rna_toggle SARCIN-RICIN on                       # Show Sarcin-ricin
 ```
 
 **Done!** 🎉
@@ -146,22 +151,23 @@ rna_load 1S72, chain=0, bg_color=lightgray
 
 ### Example 1: Basic Visualization
 ```python
-# Load RNA structure
+# Load RNA structure - all motifs automatically shown!
 rna_load 1S72
 
 # See what motifs are available
 rna_status
 
-# Show Kink-turns in red
+# Toggle visibility as needed
 rna_toggle KINK-TURN on
+rna_toggle SARCIN-RICIN on
 ```
 
 ### Example 2: Highlight Specific Motifs with Custom Visualization
 ```python
-# Load structure with chain 0 and light gray background
-rna_load 1S72, chain=0, bg_color=lightgray
+# Load structure with custom background color
+rna_load 1S72, bg_color=lightgray
 
-# Show ONLY Sarcin-ricin motifs (hide everything else)
+# Now all motifs are visible! Hide the ones you don't need
 rna_toggle SARCIN-RICIN on
 rna_toggle KINK-TURN off
 rna_toggle C-LOOP off
@@ -184,8 +190,8 @@ rna_load C:\Users\YourName\Downloads\structure.cif
 ## 🔧 Available Commands
 
 ```python
-# Load a structure
-rna_load <PDB_ID_or_PATH> [, chain=<CHAIN>, bg_color=<COLOR>]
+# Load a structure - motifs automatically show!
+rna_load <PDB_ID_or_PATH> [, bg_color=<COLOR>]
 
 # Toggle motif visibility
 rna_toggle <MOTIF_TYPE> <on|off>
@@ -195,7 +201,8 @@ rna_status
 
 # Examples:
 rna_load 1S72
-rna_load ~/structure.pdb, chain=A, bg_color=gray80
+rna_load ~/structure.pdb
+rna_load ~/structure.pdb, bg_color=lightgray
 rna_toggle KINK-TURN on
 rna_toggle SARCIN-RICIN off
 rna_status

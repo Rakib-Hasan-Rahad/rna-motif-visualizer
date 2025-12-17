@@ -28,20 +28,19 @@ class MotifVisualizerGUI:
         # Track UI state
         self.motif_visibility = {}
     
-    def load_structure_action(self, pdb_id_or_path, chain='0', background_color=None):
+    def load_structure_action(self, pdb_id_or_path, background_color=None):
         """
-        Load structure and automatically visualize motifs.
+        Load structure and automatically visualize all motifs on all RNA chains.
         
         Args:
             pdb_id_or_path (str): PDB ID or file path
-            chain (str): Chain identifier to visualize (default: '0')
             background_color (str): Color for RNA backbone (default: 'gray80')
         """
         try:
             self.logger.info(f"Loading structure: {pdb_id_or_path}")
             
             # Load and visualize with clean setup
-            motifs = self.viz_manager.load_and_visualize(pdb_id_or_path, chain, background_color)
+            motifs = self.viz_manager.load_and_visualize(pdb_id_or_path, background_color)
             
             if not motifs:
                 self.logger.warning("No motifs found or error loading structure")
@@ -52,7 +51,7 @@ class MotifVisualizerGUI:
             for motif_type, info in motifs.items():
                 self.motif_visibility[motif_type] = True
             
-            self.logger.success(f"Loaded {len(motifs)} motif types on chain {chain}")
+            self.logger.success(f"Loaded {len(motifs)} motif types - now showing all RNA chains with motifs overlaid")
             
         except Exception as e:
             self.logger.error(f"Failed to load structure: {e}")
@@ -185,22 +184,28 @@ def initialize_gui():
     gui = get_gui()
     
     # Register PyMOL commands
-    def load_structure(pdb_id_or_path='', chain='0', background_color=''):
-        """PyMOL command: Load structure and show motifs.
+    def load_structure(pdb_id_or_path='', background_color=''):
+        """PyMOL command: Load structure and automatically show all motifs.
         
         Usage:
             rna_load <pdb_id_or_path>
-            rna_load <pdb_id_or_path>, chain=0, bg_color=gray80
+            rna_load <pdb_id_or_path>, bg_color=lightgray
+        
+        Automatically:
+        - Hides everything
+        - Selects all polymer.nucleic chains
+        - Shows cartoon representation
+        - Colors RNA with background_color
+        - Displays all motifs with distinct colors
         """
         if not pdb_id_or_path:
-            gui.logger.error("Usage: rna_load <PDB_ID_or_PATH> [, chain=0, bg_color=gray80]")
+            gui.logger.error("Usage: rna_load <PDB_ID_or_PATH> [, bg_color=gray80]")
             return
         
         pdb_arg = str(pdb_id_or_path).strip()
-        chain_arg = str(chain).strip() if chain else '0'
         bg_arg = str(background_color).strip() if background_color else None
         
-        gui.load_structure_action(pdb_arg, chain_arg, bg_arg)
+        gui.load_structure_action(pdb_arg, bg_arg)
     
     def toggle_motif(motif_type='', visible=''):
         """PyMOL command: Toggle motif visibility."""
@@ -250,9 +255,9 @@ def initialize_gui():
     
     gui.logger.success("RNA Motif Visualizer GUI initialized")
     gui.logger.info("Available commands:")
-    gui.logger.info("  rna_load <PDB_ID_or_PATH> [, chain=0, bg_color=gray80]")
-    gui.logger.info("    - Load structure and visualize motifs")
-    gui.logger.info("    - chain: RNA chain to visualize (default: 0)")
+    gui.logger.info("  rna_load <PDB_ID_or_PATH> [, bg_color=gray80]")
+    gui.logger.info("    - Load structure and automatically visualize all motifs")
+    gui.logger.info("    - Displays all RNA chains uniformly, with motifs overlaid in distinct colors")
     gui.logger.info("    - bg_color: Color for RNA backbone (default: gray80)")
     gui.logger.info("  rna_toggle <MOTIF_TYPE> <on|off>")
     gui.logger.info("    - Toggle motif visibility")
@@ -261,5 +266,7 @@ def initialize_gui():
     gui.logger.info("")
     gui.logger.info("Examples:")
     gui.logger.info("  rna_load 1S72")
-    gui.logger.info("  rna_load ~/structures/rna.pdb, chain=A, bg_color=lightgray")
-    gui.logger.info("  rna_toggle KINK-TURN on")
+    gui.logger.info("  rna_load ~/structures/rna.pdb")
+    gui.logger.info("  rna_load ~/structures/rna.pdb, bg_color=lightgray")
+    gui.logger.info("  rna_toggle KINK-TURN off")
+    gui.logger.info("  rna_status")
