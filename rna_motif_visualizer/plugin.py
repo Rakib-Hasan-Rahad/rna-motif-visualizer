@@ -71,16 +71,13 @@ def __init_plugin__(app):
     print("\nAvailable motif types:")
     print("  Atlas database: HL (hairpin loops), IL (internal loops)")
     print("                  J3, J4, J5, J6, J7 (junctions)")
-    print("  Custom motifs:  KINK_TURN, REVERSE_KINK_TURN, SARCIN_RICIN")
-    print("                  C_LOOP, E_LOOP")
-    print("  Aliases accepted: KINKTURN/KINK-TURN/KTURN, CLOOP, ELOOP, etc.")
     print("\nBackground color options:")
     print("  gray80, gray60, gray40, white, lightgray, salmon, etc.")
     print("\nExample commands:")
     print("  rna_load 4V9F, bg_color=lightgray")
     print("  rna_load ~/rna.pdb, bg_color=white")
     print("  rna_toggle IL off       (hide internal loops)")
-    print("  rna_toggle KINK_TURN on (show kink turns)")
+    print("  rna_toggle HL on        (show hairpin loops)")
     print("="*70 + "\n")
 
 

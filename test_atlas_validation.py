@@ -65,12 +65,16 @@ def test_motif_registry():
             print(f"    - {motif_type}")
         
         print("\n  Custom motifs:")
-        for motif_type in registry.get("custom_motifs", {}):
-            canonical = _canonical_motif_type(motif_type)
-            if canonical != motif_type:
-                print(f"    - {canonical} (registry key: {motif_type})")
-            else:
-                print(f"    - {motif_type}")
+        custom = registry.get("custom_motifs", {})
+        if not custom:
+            print("    (none)")
+        else:
+            for motif_type in custom:
+                canonical = _canonical_motif_type(motif_type)
+                if canonical != motif_type:
+                    print(f"    - {canonical} (registry key: {motif_type})")
+                else:
+                    print(f"    - {motif_type}")
         
         return True
         

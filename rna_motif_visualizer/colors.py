@@ -18,20 +18,14 @@ NON_MOTIF_COLOR = 'gray80'  # Light gray - great contrast with colorful motifs
 # Format: RGB values normalized to 0-1 range
 # Colors are vibrant and clearly differentiable from gray80 background
 MOTIF_COLORS = {
-    'KINK_TURN': (1.0, 0.0, 0.0),           # Bright red
-    'C_LOOP': (1.0, 1.0, 0.0),              # Bright yellow
-    'SARCIN_RICIN': (0.0, 1.0, 0.0),        # Bright green
-    'REVERSE_KINK_TURN': (0.0, 1.0, 1.0),   # Bright cyan
-    'E_LOOP': (1.0, 0.0, 1.0),              # Bright magenta
-    # Legacy colors (kept for backward compatibility)
-    'KTURN': (1.0, 0.0, 0.0),               # Bright red
-    'AMINOR': (0.0, 1.0, 1.0),              # Bright cyan
-    'GNRA': (1.0, 1.0, 0.0),                # Bright yellow
-    'KL_MOTIF': (1.0, 0.0, 1.0),            # Bright magenta
-    'HAIRPIN': (0.0, 1.0, 0.5),             # Spring green
-    'BULGE': (1.0, 0.5, 0.0),               # Bright orange
-    'INTERNAL_LOOP': (0.5, 0.5, 1.0),       # Bright blue
-    'JUNCTION': (1.0, 0.0, 0.5),            # Bright rose
+    # RNA 3D Motif Atlas motif classes
+    'HL': (1.0, 0.0, 0.0),                  # Bright red
+    'IL': (0.0, 1.0, 1.0),                  # Bright cyan
+    'J3': (1.0, 1.0, 0.0),                  # Bright yellow
+    'J4': (1.0, 0.0, 1.0),                  # Bright magenta
+    'J5': (0.0, 1.0, 0.0),                  # Bright green
+    'J6': (1.0, 0.5, 0.0),                  # Bright orange
+    'J7': (0.5, 0.5, 1.0),                  # Bright blue
 }
 
 # Backup colors if a motif type is not defined
@@ -39,20 +33,13 @@ DEFAULT_COLOR = (1.0, 0.5, 0.0)  # Bright orange
 
 # PyMOL color names for reference
 PYMOL_COLOR_NAMES = {
-    'KINK_TURN': 'red',
-    'C_LOOP': 'yellow',
-    'SARCIN_RICIN': 'green',
-    'REVERSE_KINK_TURN': 'cyan',
-    'E_LOOP': 'magenta',
-    # Legacy names
-    'KTURN': 'red',
-    'AMINOR': 'cyan',
-    'GNRA': 'yellow',
-    'KL_MOTIF': 'magenta',
-    'HAIRPIN': 'green',
-    'BULGE': 'orange',
-    'INTERNAL_LOOP': 'blue',
-    'JUNCTION': 'hotpink',
+    'HL': 'red',
+    'IL': 'cyan',
+    'J3': 'yellow',
+    'J4': 'magenta',
+    'J5': 'green',
+    'J6': 'orange',
+    'J7': 'blue',
 }
 
 
@@ -101,20 +88,13 @@ def set_motif_color_in_pymol(cmd, object_name, motif_type):
 
 # Summary of available motifs and their colors
 MOTIF_LEGEND = {
-    'KINK_TURN': {'color': 'red', 'description': 'Kink-turn motifs (Bright Red)'},
-    'C_LOOP': {'color': 'yellow', 'description': 'C-loop motifs (Bright Yellow)'},
-    'SARCIN_RICIN': {'color': 'green', 'description': 'Sarcin-ricin loops (Bright Green)'},
-    'REVERSE_KINK_TURN': {'color': 'cyan', 'description': 'Reverse kink-turn motifs (Bright Cyan)'},
-    'E_LOOP': {'color': 'magenta', 'description': 'E-loop motifs (Bright Magenta)'},
-    # Legacy entries
-    'KTURN': {'color': 'red', 'description': 'K-turn motifs'},
-    'AMINOR': {'color': 'cyan', 'description': 'A-minor interactions'},
-    'GNRA': {'color': 'yellow', 'description': 'GNRA tetraloops'},
-    'KL_MOTIF': {'color': 'magenta', 'description': 'KL motifs'},
-    'HAIRPIN': {'color': 'green', 'description': 'Hairpin structures'},
-    'BULGE': {'color': 'orange', 'description': 'Bulge loops'},
-    'INTERNAL_LOOP': {'color': 'blue', 'description': 'Internal loops'},
-    'JUNCTION': {'color': 'hotpink', 'description': 'RNA junctions'},
+    'HL': {'color': 'red', 'description': 'Hairpin loops (Atlas)'},
+    'IL': {'color': 'cyan', 'description': 'Internal loops (Atlas)'},
+    'J3': {'color': 'yellow', 'description': '3-way junctions (Atlas)'},
+    'J4': {'color': 'magenta', 'description': '4-way junctions (Atlas)'},
+    'J5': {'color': 'green', 'description': '5-way junctions (Atlas)'},
+    'J6': {'color': 'orange', 'description': '6-way junctions (Atlas)'},
+    'J7': {'color': 'blue', 'description': '7-way junctions (Atlas)'},
 }
 
 

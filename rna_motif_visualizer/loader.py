@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from .utils import (
-    MotifDatabaseParser,
     PDBParser,
     MotifSelector,
     get_logger,
@@ -103,9 +102,6 @@ class ScalableMotifLoader:
         self.atlas_loader = get_atlas_loader(database_dir)
         self.pdb_mapper = get_pdb_mapper()
         
-        # Keep old parser for compatibility
-        self.legacy_parser = MotifDatabaseParser(database_dir)
-        
         self.selector = MotifSelector(cmd)
         self.loaded_motifs = {}  # Track loaded motif objects
     
@@ -128,13 +124,7 @@ class ScalableMotifLoader:
             # Get all available Atlas motifs for this PDB from mapper
             available_motifs = self.pdb_mapper.get_available_motifs(pdb_id)
             
-            # For legacy custom motifs (non-Atlas), keep backward compatibility for 1S72
-            # (custom JSONs use the generic "RNA_STRUCTURE" key and are not PDB-indexed).
-            legacy_loaded = False
-            if pdb_id == "1S72":
-                legacy_loaded = self._load_legacy_custom_motifs(structure_name, pdb_id)
-
-            if not available_motifs and not legacy_loaded:
+            if not available_motifs:
                 self.logger.warning(f"No motifs found for PDB {pdb_id}")
                 return {}
             
@@ -243,39 +233,6 @@ class ScalableMotifLoader:
                 f"Loaded {len(instances)} {motif_type_upper} motifs into {obj_name}"
             )
 
-    def _load_legacy_custom_motifs(self, structure_name: str, pdb_id: str) -> bool:
-        """Load legacy custom motifs (kink_turn, e_loop, ...) for 1S72."""
-        loaded_any = False
-        custom_files = [
-            "kink_turn",
-            "reverse_kink_turn",
-            "sarcin_ricin",
-            "c_loop",
-            "e_loop",
-        ]
-
-        for motif_file_stem in custom_files:
-            motifs = self.legacy_parser.get_motifs_for_pdb(pdb_id, motif_file_stem)
-            if not motifs:
-                continue
-
-            motif_type = motif_file_stem.upper()
-            obj_name = self.selector.create_motif_class_object(structure_name, motif_type, motifs)
-            if not obj_name:
-                continue
-
-            colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type)
-            self.loaded_motifs[motif_type] = {
-                'object_name': obj_name,
-                'count': len(motifs),
-                'visible': True,
-                'motifs': motifs,
-            }
-            loaded_any = True
-            self.logger.success(f"Loaded {len(motifs)} {motif_type} motifs into {obj_name}")
-
-        return loaded_any
-    
     def toggle_motif_type(self, motif_type: str, visible: bool) -> bool:
         """
         Toggle visibility of a motif type.
@@ -290,23 +247,7 @@ class ScalableMotifLoader:
         motif_type = str(motif_type).upper().strip()
         motif_type = motif_type.replace('-', '_').replace(' ', '_')
 
-        alias_map = {
-            # Common user-friendly aliases
-            'KINKTURN': 'KINK_TURN',
-            'KINK_TURN': 'KINK_TURN',
-            'KTURN': 'KINK_TURN',
-            'REVERSEKINKTURN': 'REVERSE_KINK_TURN',
-            'REVERSE_KINKTURN': 'REVERSE_KINK_TURN',
-            'REVERSE_KINK_TURN': 'REVERSE_KINK_TURN',
-            'SARCIN_RICIN': 'SARCIN_RICIN',
-            'SARCINRICIN': 'SARCIN_RICIN',
-            'CLOOP': 'C_LOOP',
-            'C_LOOP': 'C_LOOP',
-            'ELOOP': 'E_LOOP',
-            'E_LOOP': 'E_LOOP',
-        }
-
-        motif_type = alias_map.get(motif_type, motif_type)
+        # Atlas-only: keep normalization simple and consistent.
         
         if motif_type not in self.loaded_motifs:
             self.logger.warning(f"Motif type {motif_type} not loaded")

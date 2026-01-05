@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "description": "Registry of all available RNA motif databases - both Atlas and custom",
+  "description": "Registry of available RNA motif databases (Atlas-only)",
   "last_updated": "2025-01-04",
   
   "motif_files": {
@@ -61,50 +61,7 @@
       "motif_count": 8
     }
   },
-  
-  "custom_motifs": {
-    "KINKTURN": {
-      "file": "kink_turn.json",
-      "name": "Kink Turn",
-      "description": "Kink turn motif - characteristic RNA fold",
-      "version": "1.0",
-      "source": "Custom database",
-      "motif_count": 5
-    },
-    "REVERSE_KINKTURN": {
-      "file": "reverse_kink_turn.json",
-      "name": "Reverse Kink Turn",
-      "description": "Reverse kink turn motif variant",
-      "version": "1.0",
-      "source": "Custom database",
-      "motif_count": 2
-    },
-    "SARCIN_RICIN": {
-      "file": "sarcin_ricin.json",
-      "name": "Sarcin-Ricin Loop",
-      "description": "Sarcin-ricin motif found in rRNA",
-      "version": "1.0",
-      "source": "Custom database",
-      "motif_count": 3
-    },
-    "CLOOP": {
-      "file": "c_loop.json",
-      "name": "C Loop",
-      "description": "C-loop motif in RNA",
-      "version": "1.0",
-      "source": "Custom database",
-      "motif_count": 2
-    },
-    "ELOOP": {
-      "file": "e_loop.json",
-      "name": "E Loop",
-      "description": "E-loop motif in RNA",
-      "version": "1.0",
-      "source": "Custom database",
-      "motif_count": 2
-    }
-  },
-  
+
   "pdb_index": {
     "auto_generated": true,
     "auto_generate_on_startup": true,

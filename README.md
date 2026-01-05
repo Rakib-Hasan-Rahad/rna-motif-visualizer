@@ -11,23 +11,13 @@ This project is backed by the **RNA 3D Motif Atlas** JSON datasets (v4.5) and bu
 - Overlays motif instances in distinct colors as separate PyMOL objects
 - Lets you toggle motif classes on/off
 
-## Supported motif databases
+## Supported motif database
 
-**Atlas motifs (v4.5):**
+**RNA 3D Motif Atlas (v4.5):**
 
 - `HL` (hairpin loops)
 - `IL` (internal loops)
 - `J3`, `J4`, `J5`, `J6`, `J7` (junctions)
-
-**Legacy custom motifs (small examples):**
-
-- `KINK_TURN`
-- `REVERSE_KINK_TURN`
-- `SARCIN_RICIN`
-- `C_LOOP`
-- `E_LOOP`
-
-Note: legacy custom motifs are only PDB-specific in the legacy dataset (currently treated as a special-case for `1S72`).
 
 ## Install (PyMOL)
 
@@ -56,8 +46,8 @@ Toggle motif visibility:
 ```pml
 rna_toggle HL off
 rna_toggle IL on
-rna_toggle KINKTURN on
-rna_toggle KINK-TURN off
+rna_toggle J3 on
+rna_toggle J7 off
 ```
 
 Show status:

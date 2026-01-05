@@ -44,7 +44,6 @@ class AtlasMotifLoader:
 
         all_files: Dict[str, Dict[str, Any]] = {}
         all_files.update(self.registry.get("motif_files", {}) or {})
-        all_files.update(self.registry.get("custom_motifs", {}) or {})
 
         for motif_type, cfg in all_files.items():
             file_name = cfg.get("file")
@@ -120,10 +119,8 @@ class AtlasMotifLoader:
         """Load residue specs for a single motif instance."""
         pdb_id = pdb_id.upper()
 
-        cfg = None
         all_files: Dict[str, Dict[str, Any]] = {}
         all_files.update(self.registry.get("motif_files", {}) or {})
-        all_files.update(self.registry.get("custom_motifs", {}) or {})
         cfg = all_files.get(motif_type)
         if not cfg:
             return []
