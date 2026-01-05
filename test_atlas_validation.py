@@ -65,6 +65,13 @@ def test_atlas_loader():
         # Build the PDB index
         print("\n  Building PDB index... (indexing all motif files)")
         loader.build_pdb_index()
+
+        # Show resolved motif files (supports drop-in Atlas upgrades)
+        resolved = getattr(loader, "_resolved_motif_files", {}) or {}
+        if resolved:
+            print("\n  Resolved Atlas motif files:")
+            for motif_type in sorted(resolved.keys()):
+                print(f"    - {motif_type}: {resolved[motif_type].name}")
         
         pdb_count = len(loader.pdb_index)
         print(f"✓ PDB index built successfully")

@@ -64,6 +64,17 @@
  python3 test_atlas_validation.py
  ```
 
+## Upgrading the Atlas database (low hassle)
+
+- Drop the new Atlas JSON files into `rna_motif_visualizer/motif_database/` (e.g., `hl_4.6.json`, `il_4.6.json`, `j3_4.6.json`, …).
+- The loader auto-selects the **latest** `<type>_<version>.json` per motif type.
+
+Optional: pin to a specific Atlas version during validation or development:
+
+```bash
+RNA_MOTIF_ATLAS_VERSION=4.6 python3 test_atlas_validation.py
+```
+
  ## Project layout
 
  - `rna_motif_visualizer/` – plugin package
