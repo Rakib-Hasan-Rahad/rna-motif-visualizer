@@ -1,10 +1,12 @@
 """
-RNA Motif Visualizer - Loader Module
-Handles loading structures and motif annotations into PyMOL.
+RNA Motif Visualizer - Updated Loader Module
+Handles loading structures and motif annotations using scalable Atlas database.
 """
 
 import os
 from pathlib import Path
+from typing import Dict, List, Optional
+
 from .utils import (
     MotifDatabaseParser,
     PDBParser,
@@ -12,6 +14,8 @@ from .utils import (
     get_logger,
 )
 from . import colors
+from .atlas_loader import get_atlas_loader
+from .pdb_motif_mapper import get_pdb_mapper
 
 
 class StructureLoader:
@@ -77,12 +81,15 @@ class StructureLoader:
         return self.current_pdb_id
 
 
-class MotifLoader:
-    """Handles loading motif annotations and creating motif objects."""
+class ScalableMotifLoader:
+    """
+    Loads motifs from the scalable Atlas database.
+    Handles both Atlas motifs and legacy custom motifs.
+    """
     
     def __init__(self, cmd, database_dir):
         """
-        Initialize motif loader.
+        Initialize motif loader with scalable database.
         
         Args:
             cmd: PyMOL cmd module
@@ -91,77 +98,63 @@ class MotifLoader:
         self.cmd = cmd
         self.database_dir = database_dir
         self.logger = get_logger()
-        self.parser = MotifDatabaseParser(database_dir)
+        
+        # Initialize new scalable components
+        self.atlas_loader = get_atlas_loader(database_dir)
+        self.pdb_mapper = get_pdb_mapper()
+        
+        # Keep old parser for compatibility
+        self.legacy_parser = MotifDatabaseParser(database_dir)
+        
         self.selector = MotifSelector(cmd)
         self.loaded_motifs = {}  # Track loaded motif objects
     
-    def load_motifs(self, structure_name, pdb_id):
+    def load_motifs(self, structure_name: str, pdb_id: str) -> Dict:
         """
-        Load all available motifs for a structure.
+        Load all available motifs for a structure from Atlas database.
+        Automatically queries all motif types and loads what's available.
         
         Args:
             structure_name (str): Name of structure in PyMOL
             pdb_id (str): PDB ID to look up motifs for
         
         Returns:
-            dict: Dictionary of loaded motifs: {motif_type: [object_names]}
+            dict: Dictionary of loaded motifs: {motif_type: {details}}
         """
         try:
             self.loaded_motifs = {}
-            motif_types = self.parser.list_available_motif_types()
+            pdb_id = pdb_id.upper()
             
-            if not motif_types:
-                self.logger.warning("No motif database files found")
+            # Get all available Atlas motifs for this PDB from mapper
+            available_motifs = self.pdb_mapper.get_available_motifs(pdb_id)
+            
+            # For legacy custom motifs (non-Atlas), keep backward compatibility for 1S72
+            # (custom JSONs use the generic "RNA_STRUCTURE" key and are not PDB-indexed).
+            legacy_loaded = False
+            if pdb_id == "1S72":
+                legacy_loaded = self._load_legacy_custom_motifs(structure_name, pdb_id)
+
+            if not available_motifs and not legacy_loaded:
+                self.logger.warning(f"No motifs found for PDB {pdb_id}")
                 return {}
             
-            self.logger.info(f"Available motif types: {', '.join(motif_types)}")
-            
-            for motif_type in motif_types:
-                motifs = self.parser.get_motifs_for_pdb(pdb_id, motif_type)
-                
-                if not motifs:
-                    self.logger.debug(f"No {motif_type} motifs found for {pdb_id}")
-                    continue
-                
-                # Create PyMOL object for this motif type
-                obj_name = self.selector.create_motif_class_object(
-                    structure_name,
-                    motif_type.upper(),
-                    motifs
+            if available_motifs:
+                self.logger.info(
+                    f"Found {sum(len(m) for m in available_motifs.values())} Atlas motifs in {pdb_id}"
                 )
-                
-                if obj_name:
-                    # Color the motif
-                    motif_type_upper = motif_type.upper()
-                    colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type_upper)
-                    
-                    self.loaded_motifs[motif_type_upper] = {
-                        'object_name': obj_name,
-                        'count': len(motifs),
-                        'visible': True,
-                        'motifs': motifs  # Store motif details
-                    }
-                    
-                    self.logger.success(
-                        f"Loaded {len(motifs)} {motif_type_upper} motifs "
-                        f"into {obj_name}"
+            
+            # Process each motif type
+            for motif_type, instances in available_motifs.items():
+                try:
+                    self._load_motif_type(
+                        structure_name, 
+                        pdb_id, 
+                        motif_type, 
+                        instances
                     )
-                    
-                    # Print detailed motif information
-                    for idx, motif in enumerate(motifs, 1):
-                        motif_id = motif.get('motif_id', 'Unknown')
-                        chain = motif.get('chain', 'N/A')
-                        residues = motif.get('residues', [])
-                        partner_residues = motif.get('partner_residues', [])
-                        
-                        # Format residues as range if consecutive
-                        res_str = self._format_residues(residues)
-                        partner_str = self._format_residues(partner_residues)
-                        
-                        self.logger.info(
-                            f"  [{idx}] ID: {motif_id} | Chain: {chain} | "
-                            f"Residues: {res_str} | Partners: {partner_str}"
-                        )
+                except Exception as e:
+                    self.logger.error(f"Error loading {motif_type} motifs: {e}")
+                    continue
             
             return self.loaded_motifs
             
@@ -169,55 +162,151 @@ class MotifLoader:
             self.logger.error(f"Failed to load motifs: {e}")
             return {}
     
-    def _format_residues(self, residues):
+    def _load_motif_type(self, structure_name: str, pdb_id: str, 
+                        motif_type: str, instances: List[Dict]) -> None:
         """
-        Format residue list as ranges or individual numbers.
+        Load a specific motif type and create PyMOL objects.
         
         Args:
-            residues (list): List of residue numbers
-        
-        Returns:
-            str: Formatted residue string (e.g., "77-82, 92" or "77,78,79")
+            structure_name: PyMOL structure name
+            pdb_id: PDB ID
+            motif_type: Type of motif (HL, IL, J3, etc.)
+            instances: List of motif instances
         """
-        if not residues:
-            return "N/A"
+        if not instances:
+            return
         
-        residues = sorted(set(residues))
-        ranges = []
-        start = residues[0]
-        end = residues[0]
+        # Build motif_list in the format MotifSelector expects:
+        # [{motif_id, chain, residues}, ...]
+        motif_list: List[Dict] = []
+        motif_details = []
         
-        for i in range(1, len(residues)):
-            if residues[i] == end + 1:
-                end = residues[i]
-            else:
-                if start == end:
-                    ranges.append(str(start))
-                else:
-                    ranges.append(f"{start}-{end}")
-                start = residues[i]
-                end = residues[i]
+        for instance in instances:
+            motif_id = instance.get("motif_id", "unknown")
+            instance_id = instance.get("instance_id", "")
+            
+            # Load actual residues for this motif instance
+            residues = self.atlas_loader.load_motif_residues(
+                pdb_id, 
+                motif_type, 
+                instance_id
+            )
+            
+            if not residues:
+                continue
+
+            # Group residues by chain for robust selections
+            by_chain: Dict[str, List[int]] = {}
+            for nuc_type, res_num, chain in residues:
+                by_chain.setdefault(chain, []).append(res_num)
+
+            for chain, res_nums in by_chain.items():
+                motif_list.append(
+                    {
+                        'motif_id': str(motif_id),
+                        'chain': str(chain),
+                        'residues': sorted(set(res_nums)),
+                    }
+                )
+
+            motif_details.append({
+                'motif_id': motif_id,
+                'residues': residues,
+                'instance_id': instance_id
+            })
         
-        # Add last range
-        if start == end:
-            ranges.append(str(start))
-        else:
-            ranges.append(f"{start}-{end}")
+        if not motif_list:
+            self.logger.debug(f"No residues found for {motif_type} motifs in {pdb_id}")
+            return
         
-        return ", ".join(ranges)
+        # Create PyMOL object for this motif type
+        obj_name = self.selector.create_motif_class_object(
+            structure_name,
+            motif_type.upper(),
+            motif_list,
+        )
+        
+        if obj_name:
+            # Color the motif
+            motif_type_upper = motif_type.upper()
+            colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type_upper)
+            
+            self.loaded_motifs[motif_type_upper] = {
+                'object_name': obj_name,
+                'count': len(instances),
+                'visible': True,
+                'motifs': motif_list,
+                'motif_details': motif_details
+            }
+            
+            self.logger.success(
+                f"Loaded {len(instances)} {motif_type_upper} motifs into {obj_name}"
+            )
+
+    def _load_legacy_custom_motifs(self, structure_name: str, pdb_id: str) -> bool:
+        """Load legacy custom motifs (kink_turn, e_loop, ...) for 1S72."""
+        loaded_any = False
+        custom_files = [
+            "kink_turn",
+            "reverse_kink_turn",
+            "sarcin_ricin",
+            "c_loop",
+            "e_loop",
+        ]
+
+        for motif_file_stem in custom_files:
+            motifs = self.legacy_parser.get_motifs_for_pdb(pdb_id, motif_file_stem)
+            if not motifs:
+                continue
+
+            motif_type = motif_file_stem.upper()
+            obj_name = self.selector.create_motif_class_object(structure_name, motif_type, motifs)
+            if not obj_name:
+                continue
+
+            colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type)
+            self.loaded_motifs[motif_type] = {
+                'object_name': obj_name,
+                'count': len(motifs),
+                'visible': True,
+                'motifs': motifs,
+            }
+            loaded_any = True
+            self.logger.success(f"Loaded {len(motifs)} {motif_type} motifs into {obj_name}")
+
+        return loaded_any
     
-    def toggle_motif_type(self, motif_type, visible):
+    def toggle_motif_type(self, motif_type: str, visible: bool) -> bool:
         """
         Toggle visibility of a motif type.
         
         Args:
-            motif_type (str): Motif type (e.g., 'KTURN')
+            motif_type (str): Motif type (e.g., 'HL', 'IL')
             visible (bool): True to show, False to hide
         
         Returns:
             bool: True if successful
         """
-        motif_type = motif_type.upper()
+        motif_type = str(motif_type).upper().strip()
+        motif_type = motif_type.replace('-', '_').replace(' ', '_')
+
+        alias_map = {
+            # Common user-friendly aliases
+            'KINKTURN': 'KINK_TURN',
+            'KINK_TURN': 'KINK_TURN',
+            'KTURN': 'KINK_TURN',
+            'REVERSEKINKTURN': 'REVERSE_KINK_TURN',
+            'REVERSE_KINKTURN': 'REVERSE_KINK_TURN',
+            'REVERSE_KINK_TURN': 'REVERSE_KINK_TURN',
+            'SARCIN_RICIN': 'SARCIN_RICIN',
+            'SARCINRICIN': 'SARCIN_RICIN',
+            'CLOOP': 'C_LOOP',
+            'C_LOOP': 'C_LOOP',
+            'ELOOP': 'E_LOOP',
+            'E_LOOP': 'E_LOOP',
+        }
+
+        motif_type = alias_map.get(motif_type, motif_type)
         
         if motif_type not in self.loaded_motifs:
             self.logger.warning(f"Motif type {motif_type} not loaded")
@@ -228,11 +317,11 @@ class MotifLoader:
         self.loaded_motifs[motif_type]['visible'] = visible
         return True
     
-    def get_loaded_motifs(self):
+    def get_loaded_motifs(self) -> Dict:
         """Get dictionary of loaded motifs."""
         return self.loaded_motifs
     
-    def clear_motifs(self):
+    def clear_motifs(self) -> None:
         """Clear all loaded motif objects from PyMOL."""
         try:
             for motif_type, info in self.loaded_motifs.items():
@@ -243,7 +332,7 @@ class MotifLoader:
         except Exception as e:
             self.logger.error(f"Failed to clear motifs: {e}")
     
-    def reload_motifs(self, structure_name, pdb_id):
+    def reload_motifs(self, structure_name: str, pdb_id: str) -> Dict:
         """
         Reload motifs (clear and reload).
         
@@ -256,6 +345,12 @@ class MotifLoader:
         """
         self.clear_motifs()
         return self.load_motifs(structure_name, pdb_id)
+    
+    def get_available_motif_types(self, pdb_id: str) -> List[str]:
+        """Get list of motif types available for a PDB."""
+        pdb_id = pdb_id.upper()
+        available = self.pdb_mapper.get_available_motifs(pdb_id)
+        return sorted(list(available.keys()))
 
 
 class VisualizationManager:
@@ -263,7 +358,7 @@ class VisualizationManager:
     
     def __init__(self, cmd, database_dir):
         """
-        Initialize visualization manager.
+        Initialize visualization manager with scalable components.
         
         Args:
             cmd: PyMOL cmd module
@@ -271,10 +366,11 @@ class VisualizationManager:
         """
         self.cmd = cmd
         self.structure_loader = StructureLoader(cmd)
-        self.motif_loader = MotifLoader(cmd, database_dir)
+        self.motif_loader = ScalableMotifLoader(cmd, database_dir)
         self.logger = get_logger()
     
-    def setup_clean_visualization(self, structure_name, background_color=None):
+    def setup_clean_visualization(self, structure_name: str, 
+                                 background_color: Optional[str] = None) -> None:
         """
         Set up clean RNA visualization with uniform color.
         Automatically displays all RNA chains with all motifs overlaid.
@@ -309,7 +405,6 @@ class VisualizationManager:
             self.logger.debug("Showed cartoon representation")
             
             # Step 4: Set cartoon nucleic acid mode to 1
-            # Suppress PyMOL warning about object-state-level setting
             self.cmd.set('cartoon_nucleic_acid_mode', 1)
             self.logger.debug("Set cartoon_nucleic_acid_mode = 1")
             
@@ -323,17 +418,18 @@ class VisualizationManager:
         except Exception as e:
             self.logger.error(f"Failed to set up clean visualization: {e}")
     
-    def load_and_visualize(self, pdb_id_or_path, background_color=None):
+    def load_and_visualize(self, pdb_id_or_path: str, 
+                          background_color: Optional[str] = None) -> Dict:
         """
         Complete workflow: load structure and automatically visualize all motifs.
         
         Automated workflow:
-        1. Load structure
+        1. Load structure (from PDB database or local file)
         2. Hide everything
         3. Select all polymer.nucleic chains
         4. Show cartoon with cartoon_nucleic_acid_mode = 1
         5. Color uniformly with background_color (default: gray80)
-        6. Automatically load and overlay all motifs with distinct colors
+        6. Automatically load and overlay all motifs from Atlas database
         
         Args:
             pdb_id_or_path (str): PDB ID or file path
@@ -356,10 +452,17 @@ class VisualizationManager:
         motifs = self.motif_loader.load_motifs(structure_name, pdb_id)
         return motifs
     
-    def get_structure_info(self):
+    def get_structure_info(self) -> Dict:
         """Get current structure and motif info."""
         return {
             'structure': self.structure_loader.get_current_structure(),
             'pdb_id': self.structure_loader.get_current_pdb_id(),
             'motifs': self.motif_loader.get_loaded_motifs()
         }
+    
+    def get_available_motif_summary(self, pdb_id: str) -> str:
+        """Get summary of available motifs for a PDB."""
+        motif_types = self.motif_loader.get_available_motif_types(pdb_id)
+        if not motif_types:
+            return f"No motifs found for {pdb_id}"
+        return f"Available motifs: {', '.join(motif_types)}"

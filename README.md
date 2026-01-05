@@ -1,3 +1,97 @@
+# RNA Motif Visualizer (PyMOL Plugin)
+
+PyMOL plugin to visualize RNA structural motifs on any loaded RNA structure.
+
+This project is backed by the **RNA 3D Motif Atlas** JSON datasets (v4.5) and builds a fast in-memory index so it can map a PDB ID → motif instances → residues.
+
+## What it does
+
+- Loads an RNA structure (from **PDB ID** via RCSB fetch, or from a **local file**)
+- Displays all RNA chains uniformly (cartoon + single background color)
+- Overlays motif instances in distinct colors as separate PyMOL objects
+- Lets you toggle motif classes on/off
+
+## Supported motif databases
+
+**Atlas motifs (v4.5):**
+
+- `HL` (hairpin loops)
+- `IL` (internal loops)
+- `J3`, `J4`, `J5`, `J6`, `J7` (junctions)
+
+**Legacy custom motifs (small examples):**
+
+- `KINK_TURN`
+- `REVERSE_KINK_TURN`
+- `SARCIN_RICIN`
+- `C_LOOP`
+- `E_LOOP`
+
+Note: legacy custom motifs are only PDB-specific in the legacy dataset (currently treated as a special-case for `1S72`).
+
+## Install (PyMOL)
+
+Copy the plugin package folder into PyMOL’s startup directory.
+
+macOS / Linux:
+
+```bash
+cp -r rna_motif_visualizer ~/.pymol/startup/
+```
+
+Then restart PyMOL.
+
+## Usage (PyMOL console)
+
+Load a structure (PDB ID or local file):
+
+```pml
+rna_load 4V9F
+rna_load ~/structures/my_rna.pdb
+rna_load 4V9F, bg_color=lightgray
+```
+
+Toggle motif visibility:
+
+```pml
+rna_toggle HL off
+rna_toggle IL on
+rna_toggle KINKTURN on
+rna_toggle KINK-TURN off
+```
+
+Show status:
+
+```pml
+rna_status
+```
+
+Change background color:
+
+```pml
+rna_bg_color gray80
+rna_bg_color white
+```
+
+## Developer validation (no PyMOL needed)
+
+Run the CLI validation script to verify that the Atlas registry loads, the PDB index builds, and lookups work:
+
+```bash
+python3 test_atlas_validation.py
+```
+
+## Project layout
+
+- `rna_motif_visualizer/` – plugin package
+- `rna_motif_visualizer/motif_database/` – Atlas + legacy motif JSON files and `motif_registry.json`
+- `rna_motif_visualizer/atlas_loader.py` – Atlas indexing + residue extraction
+- `rna_motif_visualizer/pdb_motif_mapper.py` – convenience wrapper for PDB → motifs
+- `test_atlas_validation.py` – CLI validation
+
+## License
+
+MIT (see `LICENSE`).
 # RNA Motif Visualizer - Complete PyMOL Plugin Package
 
 > A production-ready PyMOL plugin for visualizing pre-annotated RNA structural motifs with zero external dependencies.

@@ -1,6 +1,6 @@
-"""
-RNA Motif Visualizer
-PyMOL plugin for visualizing pre-annotated RNA structural motifs.
+"""RNA Motif Visualizer
+
+PyMOL plugin for visualizing RNA structural motifs.
 
 This package provides:
 - Automatic loading of RNA structures from RCSB or local files
@@ -10,18 +10,30 @@ This package provides:
 - Fast, lightweight, and requires no external tools
 
 Author: Structural Biology Lab
-Version: 1.0.0
+Version: 2.0.0
 """
 
-from .plugin import __init_plugin__
-from .gui import get_gui, initialize_gui
-from .loader import VisualizationManager
+# NOTE:
+# Keep this package importable outside PyMOL.
+# PyMOL injects/provides the `pymol` module at runtime; importing it in a
+# regular Python interpreter (e.g., during CLI tests) will fail.
 
-__version__ = '1.0.0'
+__version__ = '2.0.0'
 __author__ = 'Structural Biology Lab'
-__all__ = [
-    '__init_plugin__',
-    'get_gui',
-    'initialize_gui',
-    'VisualizationManager',
-]
+
+
+def __getattr__(name):
+    """Lazy imports so non-PyMOL environments can import this package."""
+    if name == '__init_plugin__':
+        from .plugin import __init_plugin__ as value
+        return value
+    if name in {'get_gui', 'initialize_gui'}:
+        from . import gui as _gui
+        return getattr(_gui, name)
+    if name == 'VisualizationManager':
+        from .loader import VisualizationManager as value
+        return value
+    raise AttributeError(name)
+
+
+__all__ = ['__init_plugin__', 'get_gui', 'initialize_gui', 'VisualizationManager']

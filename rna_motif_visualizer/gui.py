@@ -77,17 +77,37 @@ class MotifVisualizerGUI:
     
     def get_available_motifs(self):
         """
-        Get list of available motif types.
+        Get list of available motif types for current PDB.
         
         Returns:
             list: Motif type names
         """
         try:
-            motif_types = self.viz_manager.motif_loader.parser.list_available_motif_types()
-            return [mt.upper() for mt in motif_types]
+            pdb_id = self.viz_manager.structure_loader.get_current_pdb_id()
+            if not pdb_id:
+                return []
+            
+            motif_types = self.viz_manager.motif_loader.get_available_motif_types(pdb_id)
+            return motif_types
         except Exception as e:
             self.logger.error(f"Failed to get motif types: {e}")
             return []
+    
+    def get_motif_summary(self, pdb_id):
+        """
+        Get human-readable summary of available motifs for a PDB.
+        
+        Args:
+            pdb_id (str): PDB ID
+            
+        Returns:
+            str: Summary text
+        """
+        try:
+            return self.viz_manager.get_available_motif_summary(pdb_id)
+        except Exception as e:
+            self.logger.error(f"Failed to get motif summary: {e}")
+            return "Error retrieving motif information"
     
     def set_background_color(self, color_name):
         """
@@ -268,5 +288,5 @@ def initialize_gui():
     gui.logger.info("  rna_load 1S72")
     gui.logger.info("  rna_load ~/structures/rna.pdb")
     gui.logger.info("  rna_load ~/structures/rna.pdb, bg_color=lightgray")
-    gui.logger.info("  rna_toggle KINK-TURN off")
+    gui.logger.info("  rna_toggle KINK_TURN off")
     gui.logger.info("  rna_status")
