@@ -63,13 +63,11 @@ class AtlasMotifLoader:
             self._index_motif_file_data(data, motif_type)
 
     def _index_motif_file_data(self, data: Any, motif_type: str) -> None:
-        """Index one file. Skips legacy custom motif formats safely."""
-        motifs: Iterable[Any]
-        if isinstance(data, list):
-            motifs = data
-        else:
-            # Legacy custom motif DB is dict with "RNA_STRUCTURE" key; it is not Atlas.
-            motifs = [data]
+        """Index one Atlas motif JSON file."""
+        if not isinstance(data, list):
+            return
+
+        motifs: Iterable[Any] = data
 
         for motif_entry in motifs:
             if not isinstance(motif_entry, dict):

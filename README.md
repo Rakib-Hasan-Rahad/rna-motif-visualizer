@@ -1,5 +1,80 @@
 # RNA Motif Visualizer (PyMOL Plugin)
 
+Visualize **RNA 3D Motif Atlas** motifs on any structure you load into PyMOL.
+
+The plugin is **scalable**: it pre-indexes the bundled Atlas JSON datasets so it can quickly map:
+
+PDB ID → motif instances → residues
+
+It works with **any PDB ID** in the sense that it can load/fetch any structure, and it will overlay motifs **whenever that PDB is present in the Atlas dataset**.
+
+## Motif classes (Atlas v4.5)
+
+- `HL` — hairpin loops
+- `IL` — internal loops
+- `J3`, `J4`, `J5`, `J6`, `J7` — junctions
+
+## Install (PyMOL)
+
+macOS / Linux:
+
+```bash
+cp -r rna_motif_visualizer ~/.pymol/startup/
+```
+
+Restart PyMOL.
+
+## Usage (PyMOL console)
+
+Load a structure (PDB ID or local file):
+
+```pml
+rna_load 4V9F
+rna_load ~/structures/my_rna.pdb
+rna_load 4V9F, bg_color=lightgray
+```
+
+Toggle motif visibility:
+
+```pml
+rna_toggle HL off
+rna_toggle IL on
+rna_toggle J3 on
+rna_toggle J7 off
+```
+
+Status:
+
+```pml
+rna_status
+```
+
+Background color:
+
+```pml
+rna_bg_color gray80
+rna_bg_color white
+```
+
+## Developer validation (no PyMOL needed)
+
+```bash
+python3 test_atlas_validation.py
+```
+
+## Project layout
+
+- `rna_motif_visualizer/` — plugin package
+- `rna_motif_visualizer/motif_database/` — Atlas JSON files + `motif_registry.json`
+- `rna_motif_visualizer/atlas_loader.py` — indexing + residue extraction
+- `rna_motif_visualizer/pdb_motif_mapper.py` — PDB → motifs convenience API
+- `test_atlas_validation.py` — CLI validation
+
+## License
+
+MIT (see `LICENSE`).
+# RNA Motif Visualizer (PyMOL Plugin)
+
 PyMOL plugin to visualize RNA structural motifs on any loaded RNA structure.
 
 This project is backed by the **RNA 3D Motif Atlas** JSON datasets (v4.5) and builds a fast in-memory index so it can map a PDB ID → motif instances → residues.

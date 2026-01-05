@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
-Test script to validate the scalable Atlas database implementation.
-Runs before PyMOL integration to verify data loading and PDB lookup.
+Test script to validate the scalable RNA 3D Motif Atlas implementation.
+Runs without PyMOL to verify registry loading, indexing, and PDB lookups.
 """
 
 import json
@@ -13,26 +13,6 @@ repo_root = Path(__file__).parent
 sys.path.insert(0, str(repo_root))
 
 plugin_path = repo_root / "rna_motif_visualizer"
-
-
-def _canonical_motif_type(label: str) -> str:
-    label = str(label).upper().strip()
-    label = label.replace('-', '_').replace(' ', '_')
-    alias_map = {
-        'KINKTURN': 'KINK_TURN',
-        'KINK_TURN': 'KINK_TURN',
-        'KTURN': 'KINK_TURN',
-        'REVERSEKINKTURN': 'REVERSE_KINK_TURN',
-        'REVERSE_KINKTURN': 'REVERSE_KINK_TURN',
-        'REVERSE_KINK_TURN': 'REVERSE_KINK_TURN',
-        'SARCIN_RICIN': 'SARCIN_RICIN',
-        'SARCINRICIN': 'SARCIN_RICIN',
-        'CLOOP': 'C_LOOP',
-        'C_LOOP': 'C_LOOP',
-        'ELOOP': 'E_LOOP',
-        'E_LOOP': 'E_LOOP',
-    }
-    return alias_map.get(label, label)
 
 def test_motif_registry():
     """Test that motif registry loads correctly"""
@@ -51,30 +31,14 @@ def test_motif_registry():
             registry = json.load(f)
         
         atlas_count = len(registry.get("motif_files", {}))
-        custom_count = len(registry.get("custom_motifs", {}))
-        total = atlas_count + custom_count
         
         print(f"✓ Registry loaded successfully")
         print(f"  - Atlas motif types: {atlas_count}")
-        print(f"  - Custom motif types: {custom_count}")
-        print(f"  - Total: {total}")
         
         # List all motif types
         print("\n  Atlas motifs:")
         for motif_type in registry.get("motif_files", {}):
             print(f"    - {motif_type}")
-        
-        print("\n  Custom motifs:")
-        custom = registry.get("custom_motifs", {})
-        if not custom:
-            print("    (none)")
-        else:
-            for motif_type in custom:
-                canonical = _canonical_motif_type(motif_type)
-                if canonical != motif_type:
-                    print(f"    - {canonical} (registry key: {motif_type})")
-                else:
-                    print(f"    - {motif_type}")
         
         return True
         
