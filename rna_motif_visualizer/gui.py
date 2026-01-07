@@ -1,18 +1,27 @@
 """
 RNA Motif Visualizer - GUI Module
-Provides PyMOL GUI interface for the plugin.
+Provides PyMOL GUI interface for the plugin with multi-database support.
+
+This module provides:
+- MotifVisualizerGUI: Main GUI class for the plugin
+- PyMOL command registration
+- Database selection and switching functionality
+
+Author: Structural Biology Lab
+Version: 2.0.0
 """
 
 from pymol import cmd
 from .loader import VisualizationManager
 from .utils import get_logger
 from . import colors
+from .database import get_registry
 import os
 from pathlib import Path
 
 
 class MotifVisualizerGUI:
-    """PyMOL GUI for RNA motif visualization."""
+    """PyMOL GUI for RNA motif visualization with multi-database support."""
     
     def __init__(self):
         """Initialize GUI components."""
@@ -28,19 +37,25 @@ class MotifVisualizerGUI:
         # Track UI state
         self.motif_visibility = {}
     
-    def load_structure_action(self, pdb_id_or_path, background_color=None):
+    def load_structure_action(self, pdb_id_or_path, background_color=None,
+                              database=None):
         """
-        Load structure and automatically visualize all motifs on all RNA chains.
+        Load structure and automatically visualize all motifs.
         
         Args:
             pdb_id_or_path (str): PDB ID or file path
             background_color (str): Color for RNA backbone (default: 'gray80')
+            database (str): Database to use ('atlas', 'rfam', or None for active)
         """
         try:
             self.logger.info(f"Loading structure: {pdb_id_or_path}")
             
-            # Load and visualize with clean setup
-            motifs = self.viz_manager.load_and_visualize(pdb_id_or_path, background_color)
+            # Load and visualize with specified database
+            motifs = self.viz_manager.load_and_visualize(
+                pdb_id_or_path, 
+                background_color,
+                provider_id=database
+            )
             
             if not motifs:
                 self.logger.warning("No motifs found or error loading structure")
@@ -51,10 +66,46 @@ class MotifVisualizerGUI:
             for motif_type, info in motifs.items():
                 self.motif_visibility[motif_type] = True
             
-            self.logger.success(f"Loaded {len(motifs)} motif types - now showing all RNA chains with motifs overlaid")
+            self.logger.success(f"Loaded {len(motifs)} motif types")
             
         except Exception as e:
             self.logger.error(f"Failed to load structure: {e}")
+    
+    def switch_database_action(self, database_id):
+        """
+        Switch to a different database and reload motifs.
+        
+        Args:
+            database_id (str): Database ID to switch to
+        """
+        try:
+            # Check if structure is loaded
+            info = self.viz_manager.get_structure_info()
+            if not info.get('pdb_id'):
+                # Just switch without reloading
+                registry = get_registry()
+                if registry.set_active_provider(database_id):
+                    self.logger.success(f"Switched to database: {database_id}")
+                else:
+                    self.logger.error(f"Database not found: {database_id}")
+                return
+            
+            # Reload with new database
+            motifs = self.viz_manager.reload_with_database(database_id)
+            
+            if not motifs:
+                self.logger.warning(f"No motifs found in {database_id}")
+                return
+            
+            # Update UI state
+            self.motif_visibility = {}
+            for motif_type, info in motifs.items():
+                self.motif_visibility[motif_type] = True
+            
+            self.logger.success(f"Reloaded with {len(motifs)} motif types from {database_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to switch database: {e}")
     
     def toggle_motif_action(self, motif_type, visible):
         """
@@ -161,6 +212,15 @@ class MotifVisualizerGUI:
             'description': colors.MOTIF_LEGEND.get(motif_type_upper, {}).get('description', ''),
         }
     
+    def list_databases(self):
+        """
+        List all available databases.
+        
+        Returns:
+            list: Database information dictionaries
+        """
+        return self.viz_manager.get_available_databases()
+    
     def print_status(self):
         """Print current status to PyMOL console."""
         info = self.viz_manager.get_structure_info()
@@ -169,11 +229,23 @@ class MotifVisualizerGUI:
         print("RNA MOTIF VISUALIZER - STATUS")
         print("="*60)
         
+        # Database info
+        databases = self.list_databases()
+        print("\nAvailable Databases:")
+        for db in databases:
+            active_marker = " [ACTIVE]" if db.get('active') else ""
+            print(f"  {db['id']:10s} - {db['name']}{active_marker}")
+            print(f"              {db['motif_types']} motif types, {db['pdb_count']} PDB structures")
+        
         if info['structure']:
-            print(f"Structure: {info['structure']}")
+            print(f"\nLoaded Structure: {info['structure']}")
             print(f"PDB ID: {info['pdb_id']}")
+            print(f"Using database: {info.get('database', 'N/A')}")
         else:
-            print("No structure loaded")
+            print("\nNo structure loaded")
+            print("\nTo get started:")
+            print("  rna_load <PDB_ID>")
+            print("  rna_load <PDB_ID>, database=rfam")
             return
         
         if info['motifs']:
@@ -184,6 +256,28 @@ class MotifVisualizerGUI:
         else:
             print("\nNo motifs loaded for this structure")
         
+        print("="*60 + "\n")
+    
+    def print_databases(self):
+        """Print available databases to console."""
+        print("\n" + "="*60)
+        print("AVAILABLE MOTIF DATABASES")
+        print("="*60)
+        
+        databases = self.list_databases()
+        for db in databases:
+            active_marker = " [ACTIVE]" if db.get('active') else ""
+            print(f"\n{db['id']}{active_marker}")
+            print(f"  Name: {db['name']}")
+            print(f"  Description: {db['description']}")
+            print(f"  Motif types: {db['motif_types']}")
+            print(f"  PDB structures: {db['pdb_count']}")
+        
+        print("\n" + "="*60)
+        print("To use a specific database:")
+        print("  rna_load <PDB_ID>, database=atlas")
+        print("  rna_load <PDB_ID>, database=rfam")
+        print("  rna_switch <database_id>")
         print("="*60 + "\n")
 
 
@@ -204,28 +298,37 @@ def initialize_gui():
     gui = get_gui()
     
     # Register PyMOL commands
-    def load_structure(pdb_id_or_path='', background_color=''):
+    def load_structure(pdb_id_or_path='', background_color='', database=''):
         """PyMOL command: Load structure and automatically show all motifs.
         
         Usage:
             rna_load <pdb_id_or_path>
             rna_load <pdb_id_or_path>, bg_color=lightgray
-        
-        Automatically:
-        - Hides everything
-        - Selects all polymer.nucleic chains
-        - Shows cartoon representation
-        - Colors RNA with background_color
-        - Displays all motifs with distinct colors
+            rna_load <pdb_id_or_path>, database=atlas
+            rna_load <pdb_id_or_path>, database=rfam, bg_color=white
         """
         if not pdb_id_or_path:
-            gui.logger.error("Usage: rna_load <PDB_ID_or_PATH> [, bg_color=gray80]")
+            gui.logger.error("Usage: rna_load <PDB_ID_or_PATH> [, bg_color=gray80] [, database=atlas]")
             return
         
         pdb_arg = str(pdb_id_or_path).strip()
         bg_arg = str(background_color).strip() if background_color else None
+        db_arg = str(database).strip() if database else None
         
-        gui.load_structure_action(pdb_arg, bg_arg)
+        gui.load_structure_action(pdb_arg, bg_arg, db_arg)
+    
+    def switch_database(database_id=''):
+        """PyMOL command: Switch to a different database.
+        
+        Usage:
+            rna_switch atlas
+            rna_switch rfam
+        """
+        if not database_id:
+            gui.print_databases()
+            return
+        
+        gui.switch_database_action(str(database_id).strip())
     
     def toggle_motif(motif_type='', visible=''):
         """PyMOL command: Toggle motif visibility."""
@@ -237,13 +340,12 @@ def initialize_gui():
             visible_arg = visible
         else:
             # Case 2: Everything in motif_type as a single string
-            # This happens when user types: rna_toggle KTURN on
             full_arg = str(motif_type).strip()
             parts = full_arg.split()
             
             if len(parts) < 2:
                 gui.logger.error(f"Usage: rna_toggle MOTIF_TYPE on/off")
-                gui.logger.error(f"Example: rna_toggle KTURN on")
+                gui.logger.error(f"Example: rna_toggle HL on")
                 return
             
             motif_arg = parts[0]
@@ -259,9 +361,12 @@ def initialize_gui():
         """PyMOL command: Show plugin status."""
         gui.print_status()
     
+    def list_databases():
+        """PyMOL command: List available databases."""
+        gui.print_databases()
+    
     def set_bg_color(color_name='gray80'):
         """PyMOL command: Change background color of non-motif residues."""
-        # Handle the color name argument
         color_arg = str(color_name).strip()
         if not color_arg:
             color_arg = 'gray80'
@@ -269,24 +374,27 @@ def initialize_gui():
     
     # Add commands to PyMOL
     cmd.extend('rna_load', load_structure)
+    cmd.extend('rna_switch', switch_database)
     cmd.extend('rna_toggle', toggle_motif)
     cmd.extend('rna_status', motif_status)
+    cmd.extend('rna_databases', list_databases)
     cmd.extend('rna_bg_color', set_bg_color)
     
     gui.logger.success("RNA Motif Visualizer GUI initialized")
     gui.logger.info("Available commands:")
-    gui.logger.info("  rna_load <PDB_ID_or_PATH> [, bg_color=gray80]")
-    gui.logger.info("    - Load structure and automatically visualize all motifs")
-    gui.logger.info("    - Displays all RNA chains uniformly, with motifs overlaid in distinct colors")
-    gui.logger.info("    - bg_color: Color for RNA backbone (default: gray80)")
+    gui.logger.info("  rna_load <PDB_ID> [, database=atlas|rfam] [, bg_color=gray80]")
+    gui.logger.info("    - Load structure and visualize motifs from selected database")
+    gui.logger.info("  rna_switch <database_id>")
+    gui.logger.info("    - Switch to a different database and reload motifs")
     gui.logger.info("  rna_toggle <MOTIF_TYPE> <on|off>")
     gui.logger.info("    - Toggle motif visibility")
     gui.logger.info("  rna_status - Show current status")
+    gui.logger.info("  rna_databases - List available databases")
     gui.logger.info("  rna_bg_color <COLOR_NAME> - Change background color")
     gui.logger.info("")
     gui.logger.info("Examples:")
     gui.logger.info("  rna_load 4V9F")
-    gui.logger.info("  rna_load ~/structures/rna.pdb")
-    gui.logger.info("  rna_load ~/structures/rna.pdb, bg_color=lightgray")
+    gui.logger.info("  rna_load 4V9F, database=atlas")
+    gui.logger.info("  rna_load 3OWI, database=rfam")
+    gui.logger.info("  rna_switch rfam")
     gui.logger.info("  rna_toggle HL off")
-    gui.logger.info("  rna_status")

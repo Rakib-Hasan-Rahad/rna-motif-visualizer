@@ -1,6 +1,17 @@
 """
 RNA Motif Visualizer - Updated Loader Module
-Handles loading structures and motif annotations using scalable Atlas database.
+Handles loading structures and motif annotations using scalable database providers.
+
+This module provides:
+- StructureLoader: Loads PDB structures into PyMOL
+- UnifiedMotifLoader: Loads motifs from any registered database provider
+- VisualizationManager: Coordinates the complete visualization workflow
+
+The loader now uses the database registry to support multiple databases
+(RNA 3D Atlas, Rfam, etc.) with a unified interface.
+
+Author: Structural Biology Lab
+Version: 2.0.0
 """
 
 import os
@@ -13,8 +24,10 @@ from .utils import (
     get_logger,
 )
 from . import colors
-from .atlas_loader import get_atlas_loader
-from .pdb_motif_mapper import get_pdb_mapper
+from .database import (
+    get_registry,
+    MotifInstance,
+)
 
 
 class StructureLoader:
@@ -80,15 +93,17 @@ class StructureLoader:
         return self.current_pdb_id
 
 
-class ScalableMotifLoader:
+class UnifiedMotifLoader:
     """
-    Loads motifs from the scalable Atlas database.
-    Handles both Atlas motifs and legacy custom motifs.
+    Unified motif loader that works with any database provider.
+    
+    Uses the database registry to load motifs from the active database
+    or any specified database provider.
     """
     
-    def __init__(self, cmd, database_dir):
+    def __init__(self, cmd, database_dir: str):
         """
-        Initialize motif loader with scalable database.
+        Initialize motif loader.
         
         Args:
             cmd: PyMOL cmd module
@@ -97,22 +112,21 @@ class ScalableMotifLoader:
         self.cmd = cmd
         self.database_dir = database_dir
         self.logger = get_logger()
-        
-        # Initialize new scalable components
-        self.atlas_loader = get_atlas_loader(database_dir)
-        self.pdb_mapper = get_pdb_mapper()
-        
         self.selector = MotifSelector(cmd)
-        self.loaded_motifs = {}  # Track loaded motif objects
+        self.loaded_motifs: Dict[str, Dict] = {}  # Track loaded motif objects
+        
+        # Get registry
+        self._registry = get_registry()
     
-    def load_motifs(self, structure_name: str, pdb_id: str) -> Dict:
+    def load_motifs(self, structure_name: str, pdb_id: str,
+                   provider_id: Optional[str] = None) -> Dict:
         """
-        Load all available motifs for a structure from Atlas database.
-        Automatically queries all motif types and loads what's available.
+        Load all available motifs for a structure.
         
         Args:
             structure_name (str): Name of structure in PyMOL
             pdb_id (str): PDB ID to look up motifs for
+            provider_id (str): Optional specific provider to use (uses active if None)
         
         Returns:
             dict: Dictionary of loaded motifs: {motif_type: {details}}
@@ -121,27 +135,30 @@ class ScalableMotifLoader:
             self.loaded_motifs = {}
             pdb_id = pdb_id.upper()
             
-            # Get all available Atlas motifs for this PDB from mapper
-            available_motifs = self.pdb_mapper.get_available_motifs(pdb_id)
+            # Get provider
+            if provider_id:
+                provider = self._registry.get_provider(provider_id)
+            else:
+                provider = self._registry.get_active_provider()
             
-            if not available_motifs:
-                self.logger.warning(f"No motifs found for PDB {pdb_id}")
+            if not provider:
+                self.logger.error("No database provider available")
                 return {}
             
-            if available_motifs:
-                self.logger.info(
-                    f"Found {sum(len(m) for m in available_motifs.values())} Atlas motifs in {pdb_id}"
-                )
+            # Get motifs for this PDB
+            available_motifs = provider.get_motifs_for_pdb(pdb_id)
+            
+            if not available_motifs:
+                self.logger.warning(f"No motifs found for PDB {pdb_id} in {provider.info.name}")
+                return {}
+            
+            total_count = sum(len(instances) for instances in available_motifs.values())
+            self.logger.info(f"Found {total_count} motifs in {pdb_id} ({provider.info.name})")
             
             # Process each motif type
             for motif_type, instances in available_motifs.items():
                 try:
-                    self._load_motif_type(
-                        structure_name, 
-                        pdb_id, 
-                        motif_type, 
-                        instances
-                    )
+                    self._load_motif_type(structure_name, pdb_id, motif_type, instances)
                 except Exception as e:
                     self.logger.error(f"Error loading {motif_type} motifs: {e}")
                     continue
@@ -152,57 +169,37 @@ class ScalableMotifLoader:
             self.logger.error(f"Failed to load motifs: {e}")
             return {}
     
-    def _load_motif_type(self, structure_name: str, pdb_id: str, 
-                        motif_type: str, instances: List[Dict]) -> None:
+    def _load_motif_type(self, structure_name: str, pdb_id: str,
+                        motif_type: str, instances: List) -> None:
         """
         Load a specific motif type and create PyMOL objects.
         
         Args:
             structure_name: PyMOL structure name
             pdb_id: PDB ID
-            motif_type: Type of motif (HL, IL, J3, etc.)
-            instances: List of motif instances
+            motif_type: Type of motif (HL, IL, GNRA, etc.)
+            instances: List of MotifInstance objects
         """
         if not instances:
             return
         
-        # Build motif_list in the format MotifSelector expects:
-        # [{motif_id, chain, residues}, ...]
+        # Build motif_list in format MotifSelector expects
         motif_list: List[Dict] = []
         motif_details = []
         
         for instance in instances:
-            motif_id = instance.get("motif_id", "unknown")
-            instance_id = instance.get("instance_id", "")
-            
-            # Load actual residues for this motif instance
-            residues = self.atlas_loader.load_motif_residues(
-                pdb_id, 
-                motif_type, 
-                instance_id
-            )
-            
-            if not residues:
+            if not instance.residues:
                 continue
-
-            # Group residues by chain for robust selections
-            by_chain: Dict[str, List[int]] = {}
-            for nuc_type, res_num, chain in residues:
-                by_chain.setdefault(chain, []).append(res_num)
-
-            for chain, res_nums in by_chain.items():
-                motif_list.append(
-                    {
-                        'motif_id': str(motif_id),
-                        'chain': str(chain),
-                        'residues': sorted(set(res_nums)),
-                    }
-                )
-
+            
+            # Convert to legacy format for selector
+            legacy_entries = instance.to_legacy_format()
+            motif_list.extend(legacy_entries)
+            
             motif_details.append({
-                'motif_id': motif_id,
-                'residues': residues,
-                'instance_id': instance_id
+                'motif_id': instance.motif_id,
+                'instance_id': instance.instance_id,
+                'residues': [r.to_tuple() for r in instance.residues],
+                'annotation': instance.annotation,
             })
         
         if not motif_list:
@@ -229,16 +226,14 @@ class ScalableMotifLoader:
                 'motif_details': motif_details
             }
             
-            self.logger.success(
-                f"Loaded {len(instances)} {motif_type_upper} motifs into {obj_name}"
-            )
-
+            self.logger.success(f"Loaded {len(instances)} {motif_type_upper} motifs")
+    
     def toggle_motif_type(self, motif_type: str, visible: bool) -> bool:
         """
         Toggle visibility of a motif type.
         
         Args:
-            motif_type (str): Motif type (e.g., 'HL', 'IL')
+            motif_type (str): Motif type (e.g., 'HL', 'IL', 'GNRA')
             visible (bool): True to show, False to hide
         
         Returns:
@@ -246,8 +241,6 @@ class ScalableMotifLoader:
         """
         motif_type = str(motif_type).upper().strip()
         motif_type = motif_type.replace('-', '_').replace(' ', '_')
-
-        # Atlas-only: keep normalization simple and consistent.
         
         if motif_type not in self.loaded_motifs:
             self.logger.warning(f"Motif type {motif_type} not loaded")
@@ -273,48 +266,65 @@ class ScalableMotifLoader:
         except Exception as e:
             self.logger.error(f"Failed to clear motifs: {e}")
     
-    def reload_motifs(self, structure_name: str, pdb_id: str) -> Dict:
+    def reload_motifs(self, structure_name: str, pdb_id: str,
+                     provider_id: Optional[str] = None) -> Dict:
         """
         Reload motifs (clear and reload).
         
         Args:
             structure_name (str): Name of structure in PyMOL
             pdb_id (str): PDB ID
+            provider_id (str): Optional provider ID
         
         Returns:
             dict: Loaded motifs
         """
         self.clear_motifs()
-        return self.load_motifs(structure_name, pdb_id)
+        return self.load_motifs(structure_name, pdb_id, provider_id)
     
-    def get_available_motif_types(self, pdb_id: str) -> List[str]:
+    def get_available_motif_types(self, pdb_id: str,
+                                  provider_id: Optional[str] = None) -> List[str]:
         """Get list of motif types available for a PDB."""
         pdb_id = pdb_id.upper()
-        available = self.pdb_mapper.get_available_motifs(pdb_id)
-        return sorted(list(available.keys()))
+        
+        if provider_id:
+            provider = self._registry.get_provider(provider_id)
+        else:
+            provider = self._registry.get_active_provider()
+        
+        if not provider:
+            return []
+        
+        motifs = provider.get_motifs_for_pdb(pdb_id)
+        return sorted(list(motifs.keys()))
+    
+    def get_registry(self):
+        """Get the database registry."""
+        return self._registry
 
 
 class VisualizationManager:
     """High-level manager for the entire visualization workflow."""
     
-    def __init__(self, cmd, database_dir):
+    def __init__(self, cmd, database_dir: str):
         """
-        Initialize visualization manager with scalable components.
+        Initialize visualization manager.
         
         Args:
             cmd: PyMOL cmd module
             database_dir (str): Path to motif database directory
         """
         self.cmd = cmd
+        self.database_dir = database_dir
         self.structure_loader = StructureLoader(cmd)
-        self.motif_loader = ScalableMotifLoader(cmd, database_dir)
+        self.motif_loader = UnifiedMotifLoader(cmd, database_dir)
         self.logger = get_logger()
+        self._current_provider_id = None
     
-    def setup_clean_visualization(self, structure_name: str, 
+    def setup_clean_visualization(self, structure_name: str,
                                  background_color: Optional[str] = None) -> None:
         """
         Set up clean RNA visualization with uniform color.
-        Automatically displays all RNA chains with all motifs overlaid.
         
         Workflow:
         1. Hide everything
@@ -322,7 +332,6 @@ class VisualizationManager:
         3. Show cartoon representation
         4. Set cartoon nucleic acid mode
         5. Color uniformly with background_color
-        6. Motifs overlay on top with distinct colors
         
         Args:
             structure_name (str): Name of structure in PyMOL
@@ -332,49 +341,40 @@ class VisualizationManager:
             if background_color is None:
                 background_color = colors.NON_MOTIF_COLOR or 'gray80'
             
-            # Step 1: Hide everything first
+            # Hide everything first
             self.cmd.hide('everything', 'all')
             self.logger.debug("Hidden all objects")
             
-            # Step 2: Select ALL polymer.nucleic (all RNA chains in structure)
+            # Select ALL polymer.nucleic
             rna_selection = f"{structure_name}_rna"
             self.cmd.select(rna_selection, f"{structure_name} and polymer.nucleic")
-            self.logger.debug(f"Selected all RNA chains: {rna_selection}")
             
-            # Step 3: Show cartoon representation
+            # Show cartoon representation
             self.cmd.show('cartoon', rna_selection)
-            self.logger.debug("Showed cartoon representation")
             
-            # Step 4: Set cartoon nucleic acid mode to 1
+            # Set cartoon nucleic acid mode
             self.cmd.set('cartoon_nucleic_acid_mode', 1)
-            self.logger.debug("Set cartoon_nucleic_acid_mode = 1")
             
-            # Step 5: Color uniformly
+            # Color uniformly
             self.cmd.color(background_color, rna_selection)
-            self.logger.info(f"Visualization setup: All RNA shown as {background_color} cartoon")
+            self.logger.info(f"Visualization: All RNA shown as {background_color} cartoon")
             
-            # Step 6: Clean up temporary selection (motifs will be shown on top)
+            # Clean up temporary selection
             self.cmd.delete(rna_selection)
             
         except Exception as e:
-            self.logger.error(f"Failed to set up clean visualization: {e}")
+            self.logger.error(f"Failed to set up visualization: {e}")
     
-    def load_and_visualize(self, pdb_id_or_path: str, 
-                          background_color: Optional[str] = None) -> Dict:
+    def load_and_visualize(self, pdb_id_or_path: str,
+                          background_color: Optional[str] = None,
+                          provider_id: Optional[str] = None) -> Dict:
         """
-        Complete workflow: load structure and automatically visualize all motifs.
-        
-        Automated workflow:
-        1. Load structure (from PDB database or local file)
-        2. Hide everything
-        3. Select all polymer.nucleic chains
-        4. Show cartoon with cartoon_nucleic_acid_mode = 1
-        5. Color uniformly with background_color (default: gray80)
-        6. Automatically load and overlay all motifs from Atlas database
+        Complete workflow: load structure and visualize all motifs.
         
         Args:
             pdb_id_or_path (str): PDB ID or file path
             background_color (str): Color for RNA backbone (default: 'gray80')
+            provider_id (str): Optional database provider ID
         
         Returns:
             dict: Loaded motifs, or empty dict if failed
@@ -386,20 +386,90 @@ class VisualizationManager:
         
         pdb_id = self.structure_loader.get_current_pdb_id()
         
-        # Set up clean visualization with uniform color for all RNA chains
+        # Set up clean visualization
         self.setup_clean_visualization(structure_name, background_color)
         
-        # Load motifs - they automatically overlay on the uniform backbone with distinct colors
-        motifs = self.motif_loader.load_motifs(structure_name, pdb_id)
+        # Load motifs from specified or active provider
+        motifs = self.motif_loader.load_motifs(structure_name, pdb_id, provider_id)
+        
+        if provider_id:
+            self._current_provider_id = provider_id
+        
         return motifs
+    
+    def switch_database(self, provider_id: str) -> bool:
+        """
+        Switch to a different database provider.
+        
+        Args:
+            provider_id: ID of the provider to switch to
+            
+        Returns:
+            True if successful
+        """
+        registry = self.motif_loader.get_registry()
+        if registry.set_active_provider(provider_id):
+            self._current_provider_id = provider_id
+            self.logger.info(f"Switched to database: {provider_id}")
+            return True
+        return False
+    
+    def reload_with_database(self, provider_id: str,
+                            background_color: Optional[str] = None) -> Dict:
+        """
+        Reload current structure with a different database.
+        
+        Args:
+            provider_id: Database provider to use
+            background_color: Optional background color
+            
+        Returns:
+            Loaded motifs
+        """
+        structure_name = self.structure_loader.get_current_structure()
+        pdb_id = self.structure_loader.get_current_pdb_id()
+        
+        if not structure_name or not pdb_id:
+            self.logger.error("No structure loaded")
+            return {}
+        
+        # Clear existing motifs
+        self.motif_loader.clear_motifs()
+        
+        # Set up visualization again
+        self.setup_clean_visualization(structure_name, background_color)
+        
+        # Switch database and load
+        self.switch_database(provider_id)
+        return self.motif_loader.load_motifs(structure_name, pdb_id, provider_id)
     
     def get_structure_info(self) -> Dict:
         """Get current structure and motif info."""
+        registry = self.motif_loader.get_registry()
+        active_provider = registry.get_active_provider()
+        
         return {
             'structure': self.structure_loader.get_current_structure(),
             'pdb_id': self.structure_loader.get_current_pdb_id(),
-            'motifs': self.motif_loader.get_loaded_motifs()
+            'motifs': self.motif_loader.get_loaded_motifs(),
+            'database': active_provider.info.name if active_provider else None,
+            'database_id': self._current_provider_id,
         }
+    
+    def get_available_databases(self) -> List[Dict]:
+        """Get list of available database providers."""
+        registry = self.motif_loader.get_registry()
+        return [
+            {
+                'id': pid,
+                'name': provider.info.name,
+                'description': provider.info.description,
+                'motif_types': len(provider.get_available_motif_types()),
+                'pdb_count': len(provider.get_available_pdb_ids()),
+                'active': pid == self._current_provider_id,
+            }
+            for pid, provider in registry.get_all_providers().items()
+        ]
     
     def get_available_motif_summary(self, pdb_id: str) -> str:
         """Get summary of available motifs for a PDB."""
@@ -407,3 +477,7 @@ class VisualizationManager:
         if not motif_types:
             return f"No motifs found for {pdb_id}"
         return f"Available motifs: {', '.join(motif_types)}"
+
+
+# Backwards compatibility aliases
+ScalableMotifLoader = UnifiedMotifLoader
