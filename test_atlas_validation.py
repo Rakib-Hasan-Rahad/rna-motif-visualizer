@@ -23,7 +23,7 @@ def test_motif_registry():
     registry_file = plugin_path / "motif_database" / "motif_registry.json"
     
     if not registry_file.exists():
-        print("❌ ERROR: motif_registry.json not found")
+        print("ERROR: motif_registry.json not found")
         return False
     
     try:
@@ -43,7 +43,7 @@ def test_motif_registry():
         return True
         
     except Exception as e:
-        print(f"❌ ERROR loading registry: {e}")
+        print(f"ERROR loading registry: {e}")
         return False
 
 

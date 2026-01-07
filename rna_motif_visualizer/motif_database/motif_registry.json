@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "description": "Registry of available RNA motif databases (Atlas-only)",
+  "description": "Registry of available RNA motif databases",
   "last_updated": "2025-01-04",
   
   "motif_files": {
