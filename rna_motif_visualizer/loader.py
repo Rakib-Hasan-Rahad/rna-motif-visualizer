@@ -170,15 +170,18 @@ class UnifiedMotifLoader:
             return {}
     
     def _load_motif_type(self, structure_name: str, pdb_id: str,
-                        motif_type: str, instances: List) -> None:
+                        motif_type: str, instances: List,
+                        use_direct_coloring: bool = True) -> None:
         """
-        Load a specific motif type and create PyMOL objects.
+        Load a specific motif type and visualize in PyMOL.
         
         Args:
             structure_name: PyMOL structure name
             pdb_id: PDB ID
             motif_type: Type of motif (HL, IL, GNRA, etc.)
             instances: List of MotifInstance objects
+            use_direct_coloring: If True, color residues directly on structure
+                                 (no z-fighting). If False, create separate objects.
         """
         if not instances:
             return
@@ -206,31 +209,56 @@ class UnifiedMotifLoader:
             self.logger.debug(f"No residues found for {motif_type} motifs in {pdb_id}")
             return
         
-        # Create PyMOL object for this motif type
-        obj_name = self.selector.create_motif_class_object(
-            structure_name,
-            motif_type.upper(),
-            motif_list,
-        )
+        motif_type_upper = motif_type.upper()
+        color_rgb = colors.get_color(motif_type_upper)
         
-        if obj_name:
-            # Color the motif
-            motif_type_upper = motif_type.upper()
-            colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type_upper)
+        if use_direct_coloring:
+            # NEW APPROACH: Color residues directly on the structure
+            # This avoids z-fighting/striping artifacts
+            selection_name = self.selector.color_motif_residues(
+                structure_name,
+                motif_type_upper,
+                motif_list,
+                color_rgb,
+            )
             
-            self.loaded_motifs[motif_type_upper] = {
-                'object_name': obj_name,
-                'count': len(instances),
-                'visible': True,
-                'motifs': motif_list,
-                'motif_details': motif_details
-            }
+            if selection_name:
+                self.loaded_motifs[motif_type_upper] = {
+                    'object_name': selection_name,
+                    'count': len(instances),
+                    'visible': True,
+                    'motifs': motif_list,
+                    'motif_details': motif_details,
+                    'is_selection': True,  # Flag to track this is a selection, not object
+                }
+                self.logger.success(f"Loaded {len(instances)} {motif_type_upper} motifs")
+        else:
+            # LEGACY APPROACH: Create separate PyMOL objects (causes z-fighting)
+            obj_name = self.selector.create_motif_class_object(
+                structure_name,
+                motif_type_upper,
+                motif_list,
+            )
             
-            self.logger.success(f"Loaded {len(instances)} {motif_type_upper} motifs")
+            if obj_name:
+                colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type_upper)
+                
+                self.loaded_motifs[motif_type_upper] = {
+                    'object_name': obj_name,
+                    'count': len(instances),
+                    'visible': True,
+                    'motifs': motif_list,
+                    'motif_details': motif_details,
+                    'is_selection': False,
+                }
+                self.logger.success(f"Loaded {len(instances)} {motif_type_upper} motifs")
     
     def toggle_motif_type(self, motif_type: str, visible: bool) -> bool:
         """
         Toggle visibility of a motif type.
+        
+        For direct-coloring mode: recolors residues (gray = hidden, color = visible)
+        For object mode: shows/hides the PyMOL object
         
         Args:
             motif_type (str): Motif type (e.g., 'HL', 'IL', 'GNRA')
@@ -246,8 +274,26 @@ class UnifiedMotifLoader:
             self.logger.warning(f"Motif type {motif_type} not loaded")
             return False
         
-        obj_name = self.loaded_motifs[motif_type]['object_name']
-        self.selector.toggle_object_visibility(obj_name, visible)
+        info = self.loaded_motifs[motif_type]
+        obj_name = info['object_name']
+        is_selection = info.get('is_selection', False)
+        
+        if is_selection:
+            # Direct-coloring mode: recolor the selection
+            if visible:
+                # Restore motif color
+                color_rgb = colors.get_color(motif_type)
+                color_name = f"motif_{motif_type}"
+                self.cmd.set_color(color_name, color_rgb)
+                self.cmd.color(color_name, obj_name)
+            else:
+                # Color as background (gray)
+                bg_color = colors.get_background_color()
+                self.cmd.color(bg_color, obj_name)
+        else:
+            # Object mode: show/hide the object
+            self.selector.toggle_object_visibility(obj_name, visible)
+        
         self.loaded_motifs[motif_type]['visible'] = visible
         return True
     
@@ -256,11 +302,22 @@ class UnifiedMotifLoader:
         return self.loaded_motifs
     
     def clear_motifs(self) -> None:
-        """Clear all loaded motif objects from PyMOL."""
+        """Clear all loaded motif objects/selections from PyMOL."""
         try:
             for motif_type, info in self.loaded_motifs.items():
                 obj_name = info['object_name']
-                self.selector.delete_object(obj_name)
+                is_selection = info.get('is_selection', False)
+                
+                if is_selection:
+                    # Delete the selection
+                    try:
+                        self.cmd.delete(obj_name)
+                    except:
+                        pass
+                else:
+                    # Delete the object
+                    self.selector.delete_object(obj_name)
+            
             self.loaded_motifs = {}
             self.logger.info("Cleared all motif objects")
         except Exception as e:

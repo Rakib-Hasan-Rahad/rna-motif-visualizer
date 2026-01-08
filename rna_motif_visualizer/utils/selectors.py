@@ -104,6 +104,64 @@ class MotifSelector:
             self.logger.error(f"Failed to create motif class object {motif_type}: {e}")
             return None
     
+    def color_motif_residues(self, structure_name, motif_type, motif_list, color_rgb):
+        """
+        Color residues directly on the structure without creating overlapping objects.
+        This avoids z-fighting/striping artifacts.
+        
+        Args:
+            structure_name (str): Name of the loaded structure
+            motif_type (str): Type of motif (e.g., 'KTURN')
+            motif_list (list): List of motif dictionaries with keys: chain, residues
+            color_rgb (tuple): RGB color tuple (0-1 range)
+        
+        Returns:
+            str: Selection name for the colored residues
+        """
+        if not motif_list:
+            return None
+        
+        try:
+            selection_name = f"{motif_type}_sel"
+            
+            # Collect all selection strings
+            selections = []
+            for motif in motif_list:
+                if not validate_motif_data(motif):
+                    continue
+                
+                chain = motif.get('chain')
+                residues = motif.get('residues')
+                
+                selection = SelectionParser.create_selection_string(chain, residues)
+                if selection:
+                    selections.append(selection)
+            
+            if not selections:
+                return None
+            
+            # Combine all selections
+            combined_selection = " or ".join([f"({s})" for s in selections])
+            full_selection = f"({structure_name}) and ({combined_selection})"
+            
+            # Create a named selection (not a new object)
+            self.cmd.select(selection_name, full_selection)
+            
+            # Define and apply color
+            color_name = f"motif_{motif_type}"
+            self.cmd.set_color(color_name, color_rgb)
+            self.cmd.color(color_name, selection_name)
+            
+            # Hide the selection indicator (the pink squares)
+            self.cmd.deselect()
+            
+            self.logger.info(f"Colored {motif_type} residues directly on structure")
+            
+            return selection_name
+        except Exception as e:
+            self.logger.error(f"Failed to color motif residues {motif_type}: {e}")
+            return None
+    
     def toggle_object_visibility(self, obj_name, visible):
         """
         Toggle visibility of a PyMOL object.
