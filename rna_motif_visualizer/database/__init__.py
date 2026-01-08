@@ -23,7 +23,7 @@ from .base_provider import (
     ResidueSpec,
     DatabaseInfo,
 )
-from .registry import DatabaseRegistry, get_registry
+from .registry import DatabaseRegistry, get_registry, initialize_registry
 from .atlas_provider import RNA3DAtlasProvider
 from .rfam_provider import RfamProvider
 
@@ -37,6 +37,7 @@ __all__ = [
     # Registry
     'DatabaseRegistry',
     'get_registry',
+    'initialize_registry',
     # Providers
     'RNA3DAtlasProvider',
     'RfamProvider',
