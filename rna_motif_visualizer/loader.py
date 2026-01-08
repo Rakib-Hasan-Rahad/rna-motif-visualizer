@@ -395,6 +395,10 @@ class VisualizationManager:
         if provider_id:
             self._current_provider_id = provider_id
         
+        # Print detailed summary table to PyMOL console
+        if motifs:
+            self._print_motif_summary_table(pdb_id, motifs, provider_id)
+        
         return motifs
     
     def switch_database(self, provider_id: str) -> bool:
@@ -477,6 +481,99 @@ class VisualizationManager:
         if not motif_types:
             return f"No motifs found for {pdb_id}"
         return f"Available motifs: {', '.join(motif_types)}"
+    
+    def _print_motif_summary_table(self, pdb_id: str, motifs: Dict,
+                                   provider_id: Optional[str] = None) -> None:
+        """
+        Print a detailed summary table of loaded motifs to PyMOL console.
+        
+        Args:
+            pdb_id: PDB ID
+            motifs: Dictionary of loaded motifs
+            provider_id: Database provider used
+        """
+        # Get database name
+        registry = self.motif_loader.get_registry()
+        if provider_id:
+            provider = registry.get_provider(provider_id)
+        else:
+            provider = registry.get_active_provider()
+        db_name = provider.info.name if provider else "Unknown"
+        
+        # Build the table
+        print("\n" + "=" * 80)
+        print(f"  MOTIF DETECTION SUMMARY - {pdb_id}")
+        print("=" * 80)
+        print(f"  Database: {db_name}")
+        print("-" * 80)
+        
+        # Header
+        print(f"  {'MOTIF TYPE':<15} {'COUNT':>8} {'CHAINS':<20} {'RESIDUE RANGE':<30}")
+        print("-" * 80)
+        
+        total_motifs = 0
+        all_chains = set()
+        
+        for motif_type, info in sorted(motifs.items()):
+            count = info.get('count', 0)
+            total_motifs += count
+            
+            # Extract chain and residue info from motif details
+            chains = set()
+            residue_ranges = {}
+            
+            motif_details = info.get('motif_details', [])
+            for detail in motif_details:
+                residues = detail.get('residues', [])
+                for res in residues:
+                    if isinstance(res, tuple) and len(res) >= 2:
+                        chain, resi = res[0], res[1]
+                        chains.add(chain)
+                        all_chains.add(chain)
+                        if chain not in residue_ranges:
+                            residue_ranges[chain] = {'min': resi, 'max': resi}
+                        else:
+                            residue_ranges[chain]['min'] = min(residue_ranges[chain]['min'], resi)
+                            residue_ranges[chain]['max'] = max(residue_ranges[chain]['max'], resi)
+            
+            # Format chains
+            chains_str = ', '.join(sorted(chains)) if chains else '-'
+            
+            # Format residue ranges
+            if residue_ranges:
+                range_parts = []
+                for chain in sorted(residue_ranges.keys())[:3]:  # Show first 3 chains
+                    r = residue_ranges[chain]
+                    range_parts.append(f"{chain}:{r['min']}-{r['max']}")
+                if len(residue_ranges) > 3:
+                    range_parts.append(f"+{len(residue_ranges)-3} more")
+                residue_str = ', '.join(range_parts)
+            else:
+                residue_str = '-'
+            
+            # Truncate if too long
+            if len(chains_str) > 18:
+                chains_str = chains_str[:15] + '...'
+            if len(residue_str) > 28:
+                residue_str = residue_str[:25] + '...'
+            
+            print(f"  {motif_type:<15} {count:>8} {chains_str:<20} {residue_str:<30}")
+        
+        print("-" * 80)
+        print(f"  {'TOTAL':<15} {total_motifs:>8} {len(all_chains):>3} chains")
+        print("=" * 80)
+        
+        # Color legend
+        print("\n  COLOR LEGEND:")
+        from . import colors as color_module
+        for motif_type in sorted(motifs.keys()):
+            color = color_module.MOTIF_COLORS.get(motif_type, color_module.DEFAULT_COLOR)
+            color_name = color_module.PYMOL_COLOR_NAMES.get(motif_type, 'custom')
+            # Convert RGB to hex-like description
+            r, g, b = int(color[0]*255), int(color[1]*255), int(color[2]*255)
+            print(f"    {motif_type:<10} = {color_name:<12} (RGB: {r},{g},{b})")
+        
+        print("=" * 80 + "\n")
 
 
 # Backwards compatibility aliases

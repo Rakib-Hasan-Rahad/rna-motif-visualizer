@@ -279,6 +279,24 @@ class MotifVisualizerGUI:
         print("  rna_load <PDB_ID>, database=rfam")
         print("  rna_switch <database_id>")
         print("="*60 + "\n")
+    
+    def print_motif_summary(self):
+        """Print detailed motif summary table to console."""
+        info = self.viz_manager.get_structure_info()
+        
+        if not info.get('pdb_id'):
+            print("\nNo structure loaded. Use 'rna_load <PDB_ID>' first.\n")
+            return
+        
+        pdb_id = info['pdb_id']
+        motifs = info.get('motifs', {})
+        
+        if not motifs:
+            print(f"\nNo motifs loaded for {pdb_id}.\n")
+            return
+        
+        # Use the visualization manager's summary printer
+        self.viz_manager._print_motif_summary_table(pdb_id, motifs, info.get('database_id'))
 
 
 # Global GUI instance
@@ -372,6 +390,10 @@ def initialize_gui():
             color_arg = 'gray80'
         gui.set_background_color(color_arg)
     
+    def motif_summary():
+        """PyMOL command: Show detailed motif summary table."""
+        gui.print_motif_summary()
+    
     # Add commands to PyMOL
     cmd.extend('rna_load', load_structure)
     cmd.extend('rna_switch', switch_database)
@@ -379,6 +401,7 @@ def initialize_gui():
     cmd.extend('rna_status', motif_status)
     cmd.extend('rna_databases', list_databases)
     cmd.extend('rna_bg_color', set_bg_color)
+    cmd.extend('rna_summary', motif_summary)
     
     gui.logger.success("RNA Motif Visualizer GUI initialized")
     gui.logger.info("Available commands:")
@@ -389,6 +412,7 @@ def initialize_gui():
     gui.logger.info("  rna_toggle <MOTIF_TYPE> <on|off>")
     gui.logger.info("    - Toggle motif visibility")
     gui.logger.info("  rna_status - Show current status")
+    gui.logger.info("  rna_summary - Show detailed motif table with chains/residues")
     gui.logger.info("  rna_databases - List available databases")
     gui.logger.info("  rna_bg_color <COLOR_NAME> - Change background color")
     gui.logger.info("")
