@@ -214,7 +214,24 @@ class UnifiedMotifLoader:
         motif_type_upper = motif_type.upper()
         color_rgb = colors.get_color(motif_type_upper)
         
-        # STEP 1: Create PyMOL object (for the right panel and individual viewing)
+        # STEP 1: Hide motif residues on the MAIN structure to prevent z-fighting
+        # Build combined selection for all residues of this motif type
+        from .utils.parser import SelectionParser
+        all_selections = []
+        for motif in motif_list:
+            chain = motif.get('chain')
+            residues = motif.get('residues')
+            sel = SelectionParser.create_selection_string(chain, residues)
+            if sel:
+                all_selections.append(f"({sel})")
+        
+        if all_selections:
+            combined_sel = " or ".join(all_selections)
+            main_motif_sel = f"({structure_name}) and ({combined_sel})"
+            # Hide the cartoon on main structure for these residues
+            self.cmd.hide('cartoon', main_motif_sel)
+        
+        # STEP 2: Create PyMOL object (visible in right panel)
         obj_name = self.selector.create_motif_class_object(
             structure_name,
             motif_type_upper,
@@ -222,24 +239,18 @@ class UnifiedMotifLoader:
         )
         
         if obj_name:
+            # Show cartoon on the motif object
+            self.cmd.show('cartoon', obj_name)
+            
+            # Apply consistent representation settings for uniform appearance
+            self.cmd.set('cartoon_nucleic_acid_mode', 4, obj_name)  # Simple tube mode
+            self.cmd.set('cartoon_tube_radius', 0.4, obj_name)
+            
             # Color the object with the motif color
             colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type_upper)
             
-            # Keep cartoon on the object (for when user wants to view it)
-            self.cmd.show('cartoon', obj_name)
-            
-            # STEP 2: Disable the object initially to prevent z-fighting with main structure
-            # User can enable it from panel when they want to see it standalone
-            self.cmd.disable(obj_name)
-            
-            # STEP 3: Color residues directly on the main structure (solid colors!)
-            # This is what shows when viewing the main structure
-            self.selector.color_motif_residues(
-                structure_name,
-                motif_type_upper,
-                motif_list,
-                color_rgb,
-            )
+            # Object stays ENABLED (visible in panel and on screen)
+            # No z-fighting because main structure doesn't render these residues
             
             self.loaded_motifs[motif_type_upper] = {
                 'object_name': obj_name,
@@ -249,6 +260,7 @@ class UnifiedMotifLoader:
                 'motifs': motif_list,
                 'motif_details': motif_details,
                 'color_rgb': color_rgb,
+                'main_selection': main_motif_sel if all_selections else None,
             }
             
             self.logger.success(f"Loaded {len(instances)} {motif_type_upper} motifs")
@@ -257,7 +269,7 @@ class UnifiedMotifLoader:
         """
         Toggle visibility of a motif type.
         
-        Recolors residues on the main structure and enables/disables the object.
+        Shows/hides the motif object.
         
         Args:
             motif_type (str): Motif type (e.g., 'HL', 'IL', 'GNRA')
@@ -275,22 +287,14 @@ class UnifiedMotifLoader:
         
         info = self.loaded_motifs[motif_type]
         obj_name = info['object_name']
-        structure_name = info.get('structure_name')
-        motif_list = info.get('motifs', [])
-        color_rgb = info.get('color_rgb', colors.get_color(motif_type))
-        
-        # Get selection name for the motif residues
-        selection_name = f"{motif_type}_sel"
         
         if visible:
-            # Restore motif color on the main structure
-            color_name = f"motif_{motif_type}"
-            self.cmd.set_color(color_name, color_rgb)
-            self.cmd.color(color_name, selection_name)
+            # Show the motif object
+            self.cmd.enable(obj_name)
+            self.cmd.show('cartoon', obj_name)
         else:
-            # Color as background (gray) on the main structure
-            bg_color = colors.get_background_color()
-            self.cmd.color(bg_color, selection_name)
+            # Hide the motif object
+            self.cmd.disable(obj_name)
         
         self.loaded_motifs[motif_type]['visible'] = visible
         return True
@@ -300,21 +304,14 @@ class UnifiedMotifLoader:
         return self.loaded_motifs
     
     def clear_motifs(self) -> None:
-        """Clear all loaded motif objects and selections from PyMOL."""
+        """Clear all loaded motif objects from PyMOL."""
         try:
             for motif_type, info in self.loaded_motifs.items():
                 obj_name = info['object_name']
-                selection_name = f"{motif_type}_sel"
                 
                 # Delete the object
                 try:
                     self.cmd.delete(obj_name)
-                except:
-                    pass
-                
-                # Delete the selection
-                try:
-                    self.cmd.delete(selection_name)
                 except:
                     pass
             
@@ -409,8 +406,9 @@ class VisualizationManager:
             # Show cartoon representation
             self.cmd.show('cartoon', rna_selection)
             
-            # Set cartoon nucleic acid mode
-            self.cmd.set('cartoon_nucleic_acid_mode', 1)
+            # Set consistent cartoon nucleic acid settings for uniform appearance
+            self.cmd.set('cartoon_nucleic_acid_mode', 4)  # Simple tube mode
+            self.cmd.set('cartoon_tube_radius', 0.4)
             
             # Color uniformly
             self.cmd.color(background_color, rna_selection)
@@ -583,8 +581,9 @@ class VisualizationManager:
             for detail in motif_details:
                 residues = detail.get('residues', [])
                 for res in residues:
-                    if isinstance(res, tuple) and len(res) >= 2:
-                        chain, resi = res[0], res[1]
+                    # ResidueSpec.to_tuple() returns (nucleotide, residue_number, chain)
+                    if isinstance(res, tuple) and len(res) >= 3:
+                        nucleotide, resi, chain = res[0], res[1], res[2]
                         chains.add(chain)
                         all_chains.add(chain)
                         if chain not in residue_ranges:

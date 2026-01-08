@@ -391,9 +391,38 @@ class StockholmConverter(BaseConverter):
             pdb_id = match.group(1).upper()
             start = int(match.group(2))
             end = int(match.group(3))
-            return (pdb_id, 'A', start, end)  # Default to chain A
+            # Infer default chain based on PDB and residue range
+            chain = self._infer_rna_chain(pdb_id, start)
+            return (pdb_id, chain, start, end)
         
         return None
+    
+    def _infer_rna_chain(self, pdb_id: str, start_residue: int) -> str:
+        """
+        Infer RNA chain for PDBs without explicit chain in SEED file.
+        
+        Many ribosomal structures use numeric chain IDs for RNA.
+        For these structures, we default to chain '0' (the main 23S rRNA)
+        since that's where most motifs are located.
+        """
+        # Known ribosomal structures with numeric RNA chains
+        # These use chain '0' for 23S rRNA and '9' for 5S rRNA
+        # Default to '0' since most motifs are in the 23S rRNA
+        ribosome_pdbs = {
+            '1S72', '1FFK', '1NKW', '1S1I', '1J5E', '1GIY', '1C2W', '1YHQ',
+            '2GYA', '3CPW', '2AW4', '1J5A', '1C2X', '1VQ6', '1VQ8', '1VQO',
+            '1VQP', '1VQ4', '1VQ5', '1VQ7', '1VQ9', '1YIT', '1YIJ', '1YHQ',
+            '2OTJ', '2OTL', '3CC2', '3CC4', '3CC7', '3CCE', '3CCJ', '3CCL',
+            '3CCM', '3CCQ', '3CCR', '3CCS', '3CCU', '3CD6', '3CMA', '3CME',
+        }
+        
+        if pdb_id.upper() in ribosome_pdbs:
+            # Default to chain 0 (23S rRNA) for ribosomal structures
+            # The 5S rRNA (chain 9) entries typically have explicit chain in SEED
+            return '0'
+        
+        # Default to 'A' for other structures
+        return 'A'
     
     def _generate_residues(self, chain: str, start: int, end: int,
                           sequence: str, structure: str) -> List[ResidueSpec]:
