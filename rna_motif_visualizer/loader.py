@@ -214,7 +214,7 @@ class UnifiedMotifLoader:
         motif_type_upper = motif_type.upper()
         color_rgb = colors.get_color(motif_type_upper)
         
-        # STEP 1: Create PyMOL object (for the right panel)
+        # STEP 1: Create PyMOL object (for the right panel and clicking)
         obj_name = self.selector.create_motif_class_object(
             structure_name,
             motif_type_upper,
@@ -225,9 +225,15 @@ class UnifiedMotifLoader:
             # Color the object
             colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type_upper)
             
-            # STEP 2: Hide the object to prevent z-fighting
-            # But keep it in the panel for user interaction
-            self.cmd.disable(obj_name)  # Disables display but keeps in panel
+            # STEP 2: Hide cartoon on the object to prevent z-fighting
+            # But keep the object enabled so clicking works!
+            # Show only non-bonded (nb_spheres) as tiny markers for selection
+            self.cmd.hide('cartoon', obj_name)
+            self.cmd.hide('sticks', obj_name)
+            self.cmd.hide('lines', obj_name)
+            # Show very small spheres so the object is clickable/selectable
+            self.cmd.show('nb_spheres', obj_name)
+            self.cmd.set('nb_spheres_size', 0.05, obj_name)  # Very small, almost invisible
             
             # STEP 3: Color residues directly on the main structure (solid colors!)
             self.selector.color_motif_residues(
