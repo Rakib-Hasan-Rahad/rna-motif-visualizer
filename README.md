@@ -13,7 +13,7 @@ This plugin works with multiple motif databases - the RNA 3D Motif Atlas and the
 Download or clone this repository to your computer:
 
 ```
-git clone https://github.com/your-username/rna-motif-visualizer.git
+git clone https://github.com/Rakib-Hasan-Rahad/rna-motif-visualizer.git
 ```
 
 Or download and extract the ZIP file.
