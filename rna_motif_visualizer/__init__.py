@@ -9,7 +9,7 @@ This package provides:
 - Intuitive GUI for toggling motif visibility
 - Fast, lightweight, and requires no external tools
 
-Author: Structural Biology Lab
+Author: CBB Lab
 Version: 2.0.0
 """
 
@@ -19,7 +19,7 @@ Version: 2.0.0
 # regular Python interpreter (e.g., during CLI tests) will fail.
 
 __version__ = '2.0.0'
-__author__ = 'Structural Biology Lab'
+__author__ = 'CBB Lab'
 
 
 def __getattr__(name):
