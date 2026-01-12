@@ -285,15 +285,24 @@ class MotifVisualizerGUI:
                 for source_id, provider in local_sources:
                     print(f"\n  • {provider.info.name}")
                     print(f"    ID: {source_id}")
-                    if hasattr(provider.info, 'description'):
-                        print(f"    Description: {provider.info.description}")
-                    # Get PDB count if available
-                    pdbs = provider.get_supported_pdbs() if hasattr(provider, 'get_supported_pdbs') else []
+                    
+                    # Get PDB count
+                    pdbs = []
+                    if hasattr(provider, 'get_available_pdb_ids'):
+                        pdbs = provider.get_available_pdb_ids()
+                    elif hasattr(provider, 'get_supported_pdbs'):
+                        pdbs = provider.get_supported_pdbs()
                     if pdbs:
                         print(f"    Structures: {len(pdbs)} PDBs")
-                    motif_types = provider.info.motif_types if hasattr(provider.info, 'motif_types') else []
+                    
+                    # Get motif types
+                    motif_types = []
+                    if hasattr(provider, 'get_available_motif_types'):
+                        motif_types = provider.get_available_motif_types()
+                    elif hasattr(provider.info, 'motif_types') and provider.info.motif_types:
+                        motif_types = provider.info.motif_types
                     if motif_types:
-                        print(f"    Motif Types: {', '.join(motif_types)}")
+                        print(f"    Motif Types ({len(motif_types)}): {', '.join(motif_types)}")
                 
                 if not local_sources:
                     print("    No local sources available")
@@ -309,12 +318,19 @@ class MotifVisualizerGUI:
                 for source_id, provider in online_sources:
                     print(f"\n  • {provider.info.name}")
                     print(f"    ID: {source_id}")
-                    if hasattr(provider.info, 'description'):
-                        print(f"    Description: {provider.info.description}")
+                    
+                    # Coverage info
                     if 'bgsu' in source_id.lower():
-                        print(f"    Coverage: ~3000+ RNA structures")
+                        print(f"    Structures: ~3000+ RNA PDBs (online)")
                     elif 'rfam' in source_id.lower():
-                        print(f"    Coverage: Named RNA motif families")
+                        print(f"    Structures: All Rfam-annotated PDBs (online)")
+                    
+                    # Get motif types
+                    motif_types = []
+                    if hasattr(provider, 'get_available_motif_types'):
+                        motif_types = provider.get_available_motif_types()
+                    if motif_types:
+                        print(f"    Motif Types ({len(motif_types)}): {', '.join(motif_types)}")
                 
                 if not online_sources:
                     print("    No online sources available")
