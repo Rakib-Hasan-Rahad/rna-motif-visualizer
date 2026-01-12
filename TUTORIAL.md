@@ -1,18 +1,18 @@
-# RNA Motif Visualizer - Complete Tutorial
+# RNA Motif Visualizer - Tutorial
 
-This tutorial walks you through every command with examples and expected outputs.
+Step-by-step guide to using the RNA Motif Visualizer plugin in PyMOL.
 
 ---
 
 ## 📚 Table of Contents
 
 1. [Getting Started](#1-getting-started)
-2. [Loading Your First Structure](#2-loading-your-first-structure)
-3. [Exploring Motif Types](#3-exploring-motif-types)
-4. [Navigating Instance Details](#4-navigating-instance-details)
-5. [Using Different Data Sources](#5-using-different-data-sources)
-6. [Advanced Features](#6-advanced-features)
-7. [Tips & Tricks](#7-tips--tricks)
+2. [Data Sources](#2-data-sources)
+3. [Loading Structures](#3-loading-structures)
+4. [Exploring Motifs](#4-exploring-motifs)
+5. [Instance Navigation](#5-instance-navigation)
+6. [Customizing Colors](#6-customizing-colors)
+7. [Common Workflows](#7-common-workflows)
 
 ---
 
@@ -20,507 +20,343 @@ This tutorial walks you through every command with examples and expected outputs
 
 ### Verify Installation
 
-After installing the plugin and restarting PyMOL, you should see:
+After installing and restarting PyMOL, you should see:
 
 ```
 ==================================================
 RNA Motif Visualizer v2.1.0 - Loaded Successfully!
 ==================================================
-
-Available commands:
-  rna_load <pdb_id>          Load structure and display motifs
-  rna_show <motif_type>      Show specific motif type
-  rna_instance <type> <no>   View single motif instance
-  rna_all                    Show all motifs
-  rna_summary                Display motif summary
-  rna_source <mode>          Set data source (auto/local/bgsu/rfam/all)
-  
-Type 'rna_load 1S72' to get started!
-==================================================
 ```
 
-![Welcome Message](images/tutorial_welcome.png)
-<!-- PLACEHOLDER: Screenshot of welcome message -->
+### View All Commands
 
-**If you don't see this**, the plugin isn't installed correctly. See [README.md](README.md#installation) for help.
+```
+rna_help
+```
+
+This displays a categorized command reference:
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  LOADING & SOURCES                                                   │
+├──────────────────────────────────────────────────────────────────────┤
+│  rna_load <PDB_ID>           Load structure and visualize motifs     │
+│  rna_source                  Show current source mode & config       │
+│  rna_source <MODE>           Set source (auto/local/bgsu/rfam/all)   │
+│  rna_sources                 Show all available sources (detailed)   │
+│  rna_switch <DB>             Switch database (atlas/rfam)            │
+│  rna_refresh [PDB_ID]        Force refresh from API (bypass cache)   │
+├──────────────────────────────────────────────────────────────────────┤
+│  VISUALIZATION                                                       │
+├──────────────────────────────────────────────────────────────────────┤
+│  rna_all                     Show all motifs (reset view)            │
+│  rna_show <MOTIF_TYPE>       Highlight specific motif type           │
+│  rna_instance <TYPE> <NO>    View single instance (zoom + details)   │
+│  rna_toggle <TYPE> <on|off>  Toggle motif visibility                 │
+│  rna_bg_color <COLOR>        Change background color (e.g., gray80)  │
+│  rna_color <TYPE> <COLOR>    Change motif color (e.g., HL blue)      │
+│  rna_colors                  Show color legend for motif types       │
+├──────────────────────────────────────────────────────────────────────┤
+│  INFORMATION                                                         │
+├──────────────────────────────────────────────────────────────────────┤
+│  rna_summary                 Show motif types and instance counts    │
+│  rna_status                  Show current plugin status              │
+│  rna_help                    Show this command reference             │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 2. Loading Your First Structure
+## 2. Data Sources
 
-### Step 2.1: Load a Structure
+### Check Available Sources
 
-Type in PyMOL console:
+```
+rna_sources
+```
+
+This shows LOCAL and ONLINE sources separately:
+
+```
+======================================================================
+  RNA MOTIF DATA SOURCES
+======================================================================
+
+  Current Mode: AUTO
+
+----------------------------------------------------------------------
+  LOCAL SOURCES (Offline - Bundled with Plugin)
+----------------------------------------------------------------------
+  • RNA 3D Motif Atlas (Local)
+    ID: atlas
+    Structures: 50 PDBs
+    Motif Types: HL, IL, J3, J4, J5, J6, J7
+
+----------------------------------------------------------------------
+  ONLINE SOURCES (Require Internet)
+----------------------------------------------------------------------
+  • BGSU RNA 3D Hub API
+    ID: bgsu_api
+    Coverage: ~3000+ RNA structures
+
+  • Rfam API
+    ID: rfam_api
+    Coverage: Named RNA motif families
+======================================================================
+```
+
+### Check Current Source Status
+
+```
+rna_source
+```
+
+Shows current mode and configuration (without changing anything).
+
+### Set Source Mode
+
+```
+rna_source bgsu     # Use BGSU API (~3000+ structures)
+rna_source rfam     # Use Rfam API (named motifs)
+rna_source local    # Use bundled offline database
+rna_source auto     # Smart selection (default)
+rna_source all      # Combine all sources
+```
+
+---
+
+## 3. Loading Structures
+
+### Basic Load
 
 ```
 rna_load 1S72
 ```
 
-**What happens:**
-1. Plugin downloads the PDB structure (if not already loaded)
-2. Searches all databases for motifs in this structure
-3. Creates PyMOL objects for each motif type
-4. Colors motifs distinctly
-5. Displays a summary table
-
-**Expected Output:**
-
+Output:
 ```
 [RNA Motif Visualizer] Loading 1S72...
 [RNA Motif Visualizer] Downloading structure from RCSB PDB...
-[RNA Motif Visualizer] Analyzing motifs from local database...
 [RNA Motif Visualizer] Analyzing motifs from BGSU API...
-[RNA Motif Visualizer] Analyzing motifs from Rfam API...
 
 ==================================================
   MOTIF SUMMARY - 1S72
 ==================================================
   MOTIF TYPE            INSTANCES
 --------------------------------------------------
-  GNRA                         3
-  HL                          15
-  IL                          12
-  J3                           4
+  HL                          45
+  IL                          32
+  J3                           8
   J4                           2
-  K-turn                       1
-  T-loop                       2
 --------------------------------------------------
-  Total                       39
+  Total                       87
 ==================================================
 
   Next steps:
-    rna_show GNRA              Highlight & view GNRA instances
     rna_show HL                Highlight & view HL instances
-    rna_show IL                Highlight & view IL instances
     rna_summary                Display this summary again
-    rna_all                    Show all motifs (default view)
 ```
 
-![Loaded Structure](images/tutorial_loaded.png)
-<!-- PLACEHOLDER: Screenshot of loaded structure with colored motifs -->
-
-### Step 2.2: Understand the Display
-
-- **Colored regions** = Detected motifs
-- **Each color** = Different motif type
-- **Grey regions** = Non-motif RNA backbone
-
-Look at the **Object Panel** (right side):
-- `1S72` - The full structure
-- `GNRA`, `HL`, `IL`, etc. - Motif type objects
-
----
-
-## 3. Exploring Motif Types
-
-### Step 3.1: Show a Specific Motif Type
-
-To focus on GNRA tetraloops:
+### Load with Specific Background
 
 ```
-rna_show GNRA
+rna_load 1S72 white
 ```
 
-**Expected Output:**
-
-```
-[RNA Motif Visualizer] Highlighting GNRA motifs...
-
-======================================================================
-  GNRA MOTIF INSTANCES
-======================================================================
-  Total Instances: 3
-----------------------------------------------------------------------
-  NO.    CHAIN      RESIDUE RANGE             NUCLEOTIDES
-----------------------------------------------------------------------
-  1      A          A:100-104                 GAAA
-  2      A          A:250-254                 GUGA  
-  3      B          B:50-54                   GCAA
-----------------------------------------------------------------------
-
-  Next steps:
-    rna_instance GNRA 1        View instance 1 in detail
-    rna_instance GNRA 2        View instance 2 in detail
-    rna_instance GNRA 3        View instance 3 in detail
-    rna_show HL                Switch to HL motifs
-    rna_all                    Show all motifs again
-```
-
-**What changes:**
-- GNRA motifs are highlighted
-- Other motifs are dimmed (but still visible)
-- Camera zooms to show all GNRA instances
-
-![GNRA Highlighted](images/tutorial_gnra.png)
-<!-- PLACEHOLDER: Screenshot of GNRA motifs highlighted -->
-
-### Step 3.2: Try Different Motif Types
-
-```
-rna_show HL     # Hairpin loops
-rna_show IL     # Internal loops
-rna_show J3     # 3-way junctions
-rna_show K-turn # Kink-turns
-```
-
-Each command produces a similar instance table specific to that motif type.
-
-### Step 3.3: Return to Full View
-
-```
-rna_all
-```
-
-**Expected Output:**
-
-```
-[RNA Motif Visualizer] Showing all motifs...
-
-All motif types are now visible.
-
-  Next steps:
-    rna_show GNRA              Focus on GNRA motifs
-    rna_summary                View summary table
-```
-
----
-
-## 4. Navigating Instance Details
-
-### Step 4.1: View an Individual Instance
-
-First, show a motif type:
-
-```
-rna_show GNRA
-```
-
-Then view a specific instance:
-
-```
-rna_instance GNRA 1
-```
-
-**Expected Output:**
-
-```
-[RNA Motif Visualizer] Showing GNRA instance 1...
-
-======================================================================
-  GNRA INSTANCE #1 DETAILS
-======================================================================
-  Chain: A
-  Residue Range: A:100-104
-  Nucleotides: G-A-A-A
-----------------------------------------------------------------------
-  Detailed Residues:
-    Position 1: G (A:100)
-    Position 2: A (A:101)
-    Position 3: A (A:102)
-    Position 4: A (A:103)
-----------------------------------------------------------------------
-
-  Next steps:
-    rna_instance GNRA 2        View next instance
-    rna_show GNRA              View all GNRA instances
-    rna_all                    Return to full view
-```
-
-**What happens:**
-- Camera zooms to this specific instance
-- Only this instance is highlighted
-- Residue details are displayed
-
-![Instance Detail](images/tutorial_instance.png)
-<!-- PLACEHOLDER: Screenshot of zoomed instance -->
-
-### Step 4.2: Navigate Between Instances
-
-```
-rna_instance GNRA 2  # Next instance
-rna_instance GNRA 3  # Third instance
-rna_instance GNRA 1  # Back to first
-```
-
-### Step 4.3: Out of Range Error
-
-```
-rna_instance GNRA 99
-```
-
-**Expected Output:**
-
-```
-[RNA Motif Visualizer] Error: Instance 99 not found for GNRA
-Available instances: 1-3
-
-  Try: rna_instance GNRA 1
-```
-
----
-
-## 5. Using Different Data Sources
-
-### Step 5.1: Check Current Source
-
-```
-rna_source_info
-```
-
-**Expected Output:**
-
-```
-==================================================
-  DATA SOURCE CONFIGURATION
-==================================================
-  Current Mode: AUTO
-  
-  Source Priority:
-    1. Local database (bundled)
-    2. BGSU RNA 3D Hub API
-    3. Rfam API
-    
-  Cache Status: Active
-  Cache Location: ~/.rna_motif_visualizer_cache/
-  Cache Expiry: 30 days
-==================================================
-```
-
-### Step 5.2: Switch to BGSU API Only
-
-```
-rna_source bgsu
-```
-
-**Expected Output:**
-
-```
-[RNA Motif Visualizer] Data source set to: BGSU
-
-This mode uses the BGSU RNA 3D Hub API directly.
-Coverage: ~3000+ PDB structures with hairpin loops,
-internal loops, and junction motifs.
-
-Reload your structure to apply: rna_load 1S72
-```
-
-### Step 5.3: Switch to Rfam API
-
-```
-rna_source rfam
-```
-
-**Expected Output:**
-
-```
-[RNA Motif Visualizer] Data source set to: RFAM
-
-This mode uses the Rfam API for named motifs.
-Available motifs: GNRA, UNCG, K-turn, T-loop, C-loop,
-U-turn, Sarcin-ricin loop, and more.
-
-Reload your structure to apply: rna_load 1S72
-```
-
-### Step 5.4: Use All Sources Together
-
-```
-rna_source all
-rna_load 1S72
-```
-
-This combines motifs from all sources, giving you the most comprehensive view.
-
-### Step 5.5: Use Local Only (Offline Mode)
-
-```
-rna_source local
-```
-
-Use this when you don't have internet access.
-
-### Step 5.6: Force Refresh from API
+### Force Refresh from API
 
 ```
 rna_refresh
 ```
 
-**Expected Output:**
-
-```
-[RNA Motif Visualizer] Refreshing from APIs (bypassing cache)...
-[RNA Motif Visualizer] BGSU API: Fetching fresh data...
-[RNA Motif Visualizer] Rfam API: Fetching fresh data...
-[RNA Motif Visualizer] Cache updated.
-
-Motifs refreshed. Run rna_summary to see updated counts.
-```
+Bypasses cache and fetches fresh data from APIs.
 
 ---
 
-## 6. Advanced Features
+## 4. Exploring Motifs
 
-### Step 6.1: View Summary Anytime
+### Show Specific Motif Type
 
 ```
-rna_summary
+rna_show HL
 ```
 
-This redisplays the motif summary table without reloading.
+Output:
+```
+[RNA Motif Visualizer] Highlighting HL motifs...
 
-### Step 6.2: Toggle Motif Visibility
+======================================================================
+  HL MOTIF INSTANCES
+======================================================================
+  Total Instances: 45
+----------------------------------------------------------------------
+  NO.    CHAIN      RESIDUE RANGE             NUCLEOTIDES
+----------------------------------------------------------------------
+  1      0          0:100-104                 GAAA
+  2      0          0:250-254                 GUGA
+  3      0          0:500-504                 GCAA
+  ...
+----------------------------------------------------------------------
+
+  Next steps:
+    rna_instance HL 1          View instance 1 in detail
+    rna_show IL                Switch to IL motifs
+    rna_all                    Show all motifs again
+```
+
+### Show All Motifs
+
+```
+rna_all
+```
+
+Resets view to show all motif types.
+
+### Toggle Visibility
 
 ```
 rna_toggle HL off    # Hide hairpin loops
 rna_toggle HL on     # Show them again
-rna_toggle IL off    # Hide internal loops
-```
-
-### Step 6.3: Switch Between Databases
-
-```
-rna_databases        # List available databases
-rna_switch atlas     # Switch to RNA 3D Atlas format
-rna_switch rfam      # Switch to Rfam format
-```
-
-### Step 6.4: Check Current Status
-
-```
-rna_status
-```
-
-**Expected Output:**
-
-```
-==================================================
-  RNA MOTIF VISUALIZER STATUS
-==================================================
-  Version: 2.1.0
-  Loaded Structure: 1S72
-  Source Mode: AUTO
-  Cache: Active (30 day expiry)
-  
-  Motif Objects:
-    GNRA: 3 instances (visible)
-    HL: 15 instances (visible)
-    IL: 12 instances (visible)
-    J3: 4 instances (hidden)
-==================================================
-```
-
-### Step 6.5: Change Background Color
-
-```
-rna_bg_color white   # White background
-rna_bg_color black   # Black background (default)
-rna_bg_color grey    # Grey background
 ```
 
 ---
 
-## 7. Tips & Tricks
+## 5. Instance Navigation
 
-### Tip 1: Use Tab Completion
-
-PyMOL supports tab completion. Type `rna_` and press Tab to see all commands.
-
-### Tip 2: Follow the Suggestions
-
-After each command, check the console for **"Next steps"** suggestions. They guide you through the workflow.
-
-### Tip 3: Quick Reset
+### View Single Instance
 
 ```
-cmd.delete("all")    # Clear everything
-rna_load 1S72        # Start fresh
+rna_instance HL 1
 ```
 
-### Tip 4: Compare Structures
-
+Output:
 ```
-# Load first structure
-rna_load 1S72
+[RNA Motif Visualizer] Showing HL instance 1...
 
-# Clear motif objects but keep structure
-cmd.delete("GNRA HL IL J*")
+======================================================================
+  HL INSTANCE #1 DETAILS
+======================================================================
+  Chain: 0
+  Residue Range: 0:100-104
+----------------------------------------------------------------------
+  Detailed Residues:
+    Position 1: G (0:100)
+    Position 2: A (0:101)
+    Position 3: A (0:102)
+    Position 4: A (0:103)
+----------------------------------------------------------------------
 
-# Load second structure
-rna_load 3J2B
-
-# Now you can compare
-```
-
-### Tip 5: Save Your View
-
-```
-# After positioning the view nicely
-cmd.png("my_motif_view.png", dpi=300)
-```
-
-### Tip 6: Get Help on Any Command
-
-```
-help rna_load
-help rna_show
+  Next steps:
+    rna_instance HL 2          View next instance
+    rna_show HL                View all HL instances
+    rna_all                    Return to full view
 ```
 
-### Tip 7: Keyboard Shortcuts
+The camera zooms to the instance location.
 
-Standard PyMOL shortcuts work:
-- `Ctrl+R` - Reset view
-- `Ctrl+Z` - Undo
-- `F` - Focus on selection
+### Navigate Between Instances
+
+```
+rna_instance HL 2    # Next instance
+rna_instance HL 3    # Third instance
+rna_instance HL 1    # Back to first
+```
 
 ---
 
-## 🎯 Common Workflows
+## 6. Customizing Colors
 
-### Workflow 1: Quick Analysis
+### View Current Colors
+
+```
+rna_colors
+```
+
+Output:
+```
+======================================================================
+  MOTIF COLOR LEGEND
+======================================================================
+  MOTIF TYPE          COLOR
+----------------------------------------------------------------------
+  HL                  Red (1.00, 0.40, 0.40)
+  IL                  Orange (1.00, 0.60, 0.20)
+  J3                  Yellow (1.00, 0.80, 0.20)
+  J4                  Green (0.20, 0.80, 0.20)
+  GNRA                Forest Green (0.20, 0.60, 0.20)
+  K-turn              Marine Blue (0.10, 0.40, 0.60)
+======================================================================
+```
+
+### Change Motif Color
+
+```
+rna_color HL blue       # Change hairpin loops to blue
+rna_color GNRA red      # Change GNRA tetraloops to red
+rna_color IL cyan       # Change internal loops to cyan
+```
+
+Available colors:
+- Basic: red, green, blue, yellow, cyan, magenta
+- Extended: orange, purple, pink, white, gray, lime, teal, salmon
+- PyMOL: forest, marine, slate, firebrick, deepolive
+
+### Change Background Color
+
+```
+rna_bg_color white
+rna_bg_color gray80
+rna_bg_color black
+```
+
+---
+
+## 7. Common Workflows
+
+### Quick Analysis
+
+```
+rna_help                 # See all commands
+rna_sources              # Check available sources
+rna_source bgsu          # Use BGSU API
+rna_load 1S72            # Load structure
+rna_summary              # See motif counts
+```
+
+### Detailed Motif Exploration
 
 ```
 rna_load 1S72
-rna_summary
+rna_show HL              # Focus on hairpin loops
+rna_instance HL 1        # Examine first instance
+rna_instance HL 2        # Next instance
+rna_all                  # Back to full view
 ```
 
-Just see what motifs are present.
-
-### Workflow 2: Detailed Motif Exploration
-
-```
-rna_load 1S72
-rna_show GNRA
-rna_instance GNRA 1
-rna_instance GNRA 2
-rna_instance GNRA 3
-rna_all
-```
-
-Examine each GNRA tetraloop in detail.
-
-### Workflow 3: Compare Motif Sources
+### Compare Sources
 
 ```
 rna_source local
 rna_load 1S72
-rna_summary          # Note the counts
+rna_summary              # Note counts from local
 
 rna_source bgsu
 rna_load 1S72
-rna_summary          # Compare with BGSU
+rna_summary              # Compare with BGSU API
 
 rna_source all
 rna_load 1S72
-rna_summary          # See combined results
+rna_summary              # Combined results
 ```
 
-### Workflow 4: Publication Figure
+### Publication Figure
 
 ```
 rna_load 1S72
 rna_show GNRA
 rna_instance GNRA 1
-rna_bg_color white
+rna_color GNRA red       # Custom color
+rna_bg_color white       # White background
 ray 2400, 2400
 png "gnra_tetraloop.png"
 ```
@@ -531,21 +367,23 @@ png "gnra_tetraloop.png"
 
 | Action | Command |
 |--------|---------|
+| See all commands | `rna_help` |
+| Check sources | `rna_sources` |
+| Set source | `rna_source bgsu` |
 | Load structure | `rna_load 1S72` |
 | Show all motifs | `rna_all` |
-| Focus on type | `rna_show GNRA` |
-| View instance | `rna_instance GNRA 1` |
+| Focus on type | `rna_show HL` |
+| View instance | `rna_instance HL 1` |
 | See summary | `rna_summary` |
-| Change source | `rna_source bgsu` |
+| Change color | `rna_color HL blue` |
 | Force refresh | `rna_refresh` |
-| Hide motif type | `rna_toggle HL off` |
 | Check status | `rna_status` |
 
 ---
 
 ## 🆘 Need Help?
 
-- See [README.md](README.md) for installation and troubleshooting
+- See [README.md](README.md) for installation
 - See [DEVELOPER.md](DEVELOPER.md) for technical details
 - Open an issue on GitHub for bugs
 
