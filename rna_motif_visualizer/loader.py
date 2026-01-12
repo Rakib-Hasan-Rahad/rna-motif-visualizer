@@ -898,8 +898,12 @@ class VisualizationManager:
     
     def show_motif_instance(self, motif_type: str, instance_no: int) -> bool:
         """
-        Show only a specific instance of a motif type.
-        Creates the instance object on-demand to avoid memory issues.
+        Show only a specific instance of a motif type highlighted, with full structure in gray.
+        
+        Workflow:
+        1. Hide all separate motif objects
+        2. Show full structure in gray80
+        3. Color ONLY the specific instance residues in the motif color
         
         Args:
             motif_type: Motif type (e.g., 'GNRA')
@@ -923,36 +927,62 @@ class VisualizationManager:
             self.logger.error(f"Instance {instance_no} not found. Valid range: 1-{len(motif_details)}")
             return False
         
-        # Hide all motif type objects
+        if not structure_name:
+            self.logger.error("No structure name found")
+            return False
+        
+        # Step 1: Hide ALL separate motif objects
         for mt, mt_info in loaded_motifs.items():
             obj_name = mt_info.get('object_name')
             if obj_name:
                 self.cmd.disable(obj_name)
         
-        # Hide any previously created instance objects for this motif type
-        # (only the ones that were created, not all possible)
+        # Hide any previously created instance objects
         for obj in self.cmd.get_object_list():
-            if obj.startswith(f"{motif_type}_") and obj[len(motif_type)+1:].isdigit():
-                self.cmd.disable(obj)
+            for mt in loaded_motifs.keys():
+                if obj.startswith(f"{mt}_") and obj[len(mt)+1:].isdigit():
+                    self.cmd.disable(obj)
         
-        # Create or show the requested instance object on-demand
-        instance_obj = f"{motif_type}_{instance_no}"
+        # Step 2: Show the full structure with uniform representation in gray80
+        self.cmd.enable(structure_name)
+        self.cmd.show('cartoon', f"{structure_name} and polymer.nucleic")
+        self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
+        self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
+        self.cmd.color('gray80', f"{structure_name} and polymer.nucleic")
+        
+        # Step 3: Build selection for this specific instance and color it
         detail = motif_details[instance_no - 1]
+        residues = detail.get('residues', [])
         
-        # Check if object already exists
-        existing_objects = self.cmd.get_object_list()
-        if instance_obj not in existing_objects:
-            # Create the object on-demand
-            self._create_single_instance_object(motif_type, instance_no, detail, structure_name)
-        
-        # Show the instance
-        try:
-            self.cmd.enable(instance_obj)
-            self.cmd.show('cartoon', instance_obj)
-            self.cmd.zoom(instance_obj, 5)  # Zoom to the instance
-        except Exception as e:
-            self.logger.error(f"Could not show instance: {e}")
-            return False
+        if residues:
+            from .utils.parser import SelectionParser
+            
+            # Build chain-residue mapping
+            chain_residues = {}
+            for res in residues:
+                if isinstance(res, tuple) and len(res) >= 3:
+                    nucleotide, resi, chain = res[0], res[1], res[2]
+                    if chain not in chain_residues:
+                        chain_residues[chain] = []
+                    chain_residues[chain].append(resi)
+            
+            # Create selection for this instance
+            selections = []
+            for chain, resi_list in chain_residues.items():
+                sel = SelectionParser.create_selection_string(chain, sorted(resi_list))
+                if sel:
+                    selections.append(f"({sel})")
+            
+            if selections:
+                combined_sel = " or ".join(selections)
+                instance_sel = f"({structure_name}) and ({combined_sel})"
+                
+                # Show and color only this instance
+                self.cmd.show('cartoon', instance_sel)
+                colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)
+                
+                # Zoom to the instance
+                self.cmd.zoom(instance_sel, 5)
         
         # Print instance details
         self._print_single_instance_info(motif_type, instance_no, detail)
