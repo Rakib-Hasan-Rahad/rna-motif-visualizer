@@ -185,7 +185,7 @@ After loading, you'll see motif objects in the right panel:
 <!-- PLACEHOLDER: Screenshot of PyMOL object panel with motif objects -->
 
 - **Type Objects**: `GNRA`, `HL`, `IL` - contain all instances of that type
-- **Instance Objects**: `GNRA_1`, `GNRA_2` - individual instances (created after `rna_show`)
+- **Instance Objects**: `GNRA_1`, `GNRA_2` - individual instances (created on-demand via `rna_instance`)
 
 ---
 
