@@ -646,9 +646,10 @@ class VisualizationManager:
         Show only a specific motif type highlighted, with full structure visible in gray.
         
         Workflow:
-        1. Show full PDB structure in gray80
-        2. Highlight the selected motif type in its color
-        3. Hide other motif type objects
+        1. Hide ALL separate motif objects (avoid overlap/stripe artifacts)
+        2. Show full PDB structure uniformly
+        3. Color the entire structure gray80
+        4. Color ONLY the selected motif residues in their color (within the structure)
         
         Args:
             motif_type: Motif type to show (e.g., 'GNRA', 'HL')
@@ -664,42 +665,43 @@ class VisualizationManager:
             self.logger.info(f"Available: {', '.join(loaded_motifs.keys())}")
             return False
         
-        # Get structure name from the loaded motif info
+        # Get structure name and motif details
         info = loaded_motifs[motif_type]
         structure_name = info.get('structure_name')
         motif_details = info.get('motif_details', [])
+        main_selection = info.get('main_selection')
         
-        if structure_name:
-            # Step 1: Show full structure in gray80
-            try:
-                # Enable and show the main structure
-                self.cmd.enable(structure_name)
-                self.cmd.show('cartoon', structure_name)
-                self.cmd.color('gray80', structure_name)
-                self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
-                self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
-            except Exception as e:
-                self.logger.debug(f"Could not set structure display: {e}")
+        if not structure_name:
+            self.logger.error("No structure name found")
+            return False
         
-        # Step 2: Handle motif objects - show only the selected one
+        # Step 1: Hide ALL separate motif objects (prevents overlap/stripes)
         for mt, mt_info in loaded_motifs.items():
             obj_name = mt_info.get('object_name')
             if obj_name:
-                if mt == motif_type:
-                    # Show and highlight this motif type
-                    self.cmd.enable(obj_name)
-                    self.cmd.show('cartoon', obj_name)
-                    colors.set_motif_color_in_pymol(self.cmd, obj_name, mt)
-                else:
-                    # Hide other motif objects
-                    self.cmd.disable(obj_name)
+                self.cmd.disable(obj_name)
         
-        # Step 3: Hide any previously created instance objects
+        # Hide any previously created instance objects
         for obj in self.cmd.get_object_list():
-            # Match patterns like GNRA_1, HL_23, etc.
             for mt in loaded_motifs.keys():
                 if obj.startswith(f"{mt}_") and obj[len(mt)+1:].isdigit():
                     self.cmd.disable(obj)
+        
+        # Step 2: Show the full structure with uniform representation
+        self.cmd.enable(structure_name)
+        self.cmd.show('cartoon', f"{structure_name} and polymer.nucleic")
+        self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
+        self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
+        
+        # Step 3: Color the ENTIRE structure gray80 first
+        self.cmd.color('gray80', f"{structure_name} and polymer.nucleic")
+        
+        # Step 4: Color ONLY the selected motif residues in their color
+        if main_selection:
+            # Show the motif residues (in case they were hidden)
+            self.cmd.show('cartoon', main_selection)
+            # Color them with the motif color
+            colors.set_motif_color_in_pymol(self.cmd, main_selection, motif_type)
         
         # Print instance table
         self._print_motif_instance_table(motif_type, motif_details)
@@ -997,41 +999,58 @@ class VisualizationManager:
         print("=" * 50 + "\n")
     
     def show_all_motifs(self) -> None:
-        """Show all loaded motifs with full structure visible (reset to default view)."""
+        """
+        Show all loaded motifs with full structure visible (reset to default view).
+        
+        Workflow:
+        1. Hide ALL separate motif objects (avoid overlap/stripe artifacts)
+        2. Show full PDB structure uniformly in gray80
+        3. Color each motif type's residues in the structure with their color
+        """
         loaded_motifs = self.motif_loader.get_loaded_motifs()
         
-        # Get structure name and show full structure in gray80
+        # Get structure name
         structure_name = None
         for info in loaded_motifs.values():
             if info.get('structure_name'):
                 structure_name = info.get('structure_name')
                 break
         
-        if structure_name:
-            try:
-                self.cmd.enable(structure_name)
-                self.cmd.show('cartoon', structure_name)
-                self.cmd.color('gray80', structure_name)
-                self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
-                self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
-            except Exception as e:
-                self.logger.debug(f"Could not set structure display: {e}")
+        if not structure_name:
+            self.logger.error("No structure loaded")
+            return
         
-        # Show all motif type objects with their colors
+        # Step 1: Hide ALL separate motif objects (prevents overlap/stripes)
         for motif_type, info in loaded_motifs.items():
             obj_name = info.get('object_name')
             if obj_name:
-                self.cmd.enable(obj_name)
-                self.cmd.show('cartoon', obj_name)
-                colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type)
+                self.cmd.disable(obj_name)
             
-            # Disable individual instance objects
+            # Also disable individual instance objects
             motif_details = info.get('motif_details', [])
             for i in range(1, len(motif_details) + 1):
                 try:
                     self.cmd.disable(f"{motif_type}_{i}")
                 except:
                     pass
+        
+        # Step 2: Show the full structure with uniform representation
+        self.cmd.enable(structure_name)
+        self.cmd.show('cartoon', f"{structure_name} and polymer.nucleic")
+        self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
+        self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
+        
+        # Step 3: Color the ENTIRE structure gray80 first
+        self.cmd.color('gray80', f"{structure_name} and polymer.nucleic")
+        
+        # Step 4: Color each motif type's residues in their color
+        for motif_type, info in loaded_motifs.items():
+            main_selection = info.get('main_selection')
+            if main_selection:
+                # Show the motif residues (in case they were hidden)
+                self.cmd.show('cartoon', main_selection)
+                # Color them with the motif color
+                colors.set_motif_color_in_pymol(self.cmd, main_selection, motif_type)
         
         self.logger.info("All motifs shown")
         
