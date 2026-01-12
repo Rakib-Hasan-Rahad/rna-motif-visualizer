@@ -126,21 +126,6 @@ PYMOL_COLOR_NAMES = {
 }
 
 
-def get_color(motif_type):
-    """
-    Get RGB color tuple for a motif type.
-    
-    Args:
-        motif_type (str): Motif type identifier
-    
-    Returns:
-        tuple: RGB color values (0-1 range)
-    """
-    # Normalize: uppercase and convert dashes to underscores
-    normalized = str(motif_type).upper().replace('-', '_')
-    return MOTIF_COLORS.get(normalized, DEFAULT_COLOR)
-
-
 def get_color_name(motif_type):
     """
     Get PyMOL color name for a motif type.
@@ -174,8 +159,89 @@ def set_motif_color_in_pymol(cmd, object_name, motif_type):
         print(f"Warning: Could not set color for {object_name}: {e}")
 
 
-# Summary of available motifs and their colors (for legend display)
-MOTIF_LEGEND = {
+# Custom colors set by user (overrides defaults)
+CUSTOM_COLORS = {}
+
+
+def set_custom_motif_color(motif_type, color):
+    """
+    Set a custom color for a motif type.
+    
+    Args:
+        motif_type (str): Motif type (e.g., 'HL', 'GNRA')
+        color: Either a PyMOL color name (str) or RGB tuple
+        
+    Returns:
+        tuple: The RGB color that was set
+    """
+    normalized = str(motif_type).upper().replace('-', '_')
+    
+    # If it's a string, try to convert common color names to RGB
+    if isinstance(color, str):
+        color_map = {
+            'red': (1.0, 0.0, 0.0),
+            'green': (0.0, 1.0, 0.0),
+            'blue': (0.0, 0.0, 1.0),
+            'yellow': (1.0, 1.0, 0.0),
+            'cyan': (0.0, 1.0, 1.0),
+            'magenta': (1.0, 0.0, 1.0),
+            'orange': (1.0, 0.5, 0.0),
+            'pink': (1.0, 0.4, 0.7),
+            'purple': (0.6, 0.0, 0.6),
+            'white': (1.0, 1.0, 1.0),
+            'black': (0.0, 0.0, 0.0),
+            'gray': (0.5, 0.5, 0.5),
+            'grey': (0.5, 0.5, 0.5),
+            'teal': (0.0, 0.5, 0.5),
+            'brown': (0.6, 0.3, 0.0),
+            'gold': (1.0, 0.84, 0.0),
+            'salmon': (1.0, 0.5, 0.4),
+            'lime': (0.5, 1.0, 0.0),
+            'violet': (0.5, 0.0, 1.0),
+            'coral': (1.0, 0.5, 0.31),
+            'turquoise': (0.25, 0.88, 0.82),
+            'olive': (0.5, 0.5, 0.0),
+            'navy': (0.0, 0.0, 0.5),
+            'maroon': (0.5, 0.0, 0.0),
+            'aqua': (0.0, 1.0, 1.0),
+            'silver': (0.75, 0.75, 0.75),
+        }
+        color_lower = color.lower()
+        if color_lower in color_map:
+            rgb = color_map[color_lower]
+        else:
+            # Return the string as-is, will be used directly by PyMOL
+            CUSTOM_COLORS[normalized] = color
+            # Also update MOTIF_COLORS with a placeholder
+            return color
+    else:
+        rgb = color
+    
+    # Store in custom colors and update MOTIF_COLORS
+    CUSTOM_COLORS[normalized] = rgb
+    MOTIF_COLORS[normalized] = rgb
+    return rgb
+
+
+def get_color(motif_type):
+    """
+    Get RGB color tuple for a motif type.
+    Checks custom colors first, then defaults.
+    
+    Args:
+        motif_type (str): Motif type identifier
+    
+    Returns:
+        tuple: RGB color values (0-1 range)
+    """
+    # Normalize: uppercase and convert dashes to underscores
+    normalized = str(motif_type).upper().replace('-', '_')
+    # Check custom colors first
+    if normalized in CUSTOM_COLORS:
+        custom = CUSTOM_COLORS[normalized]
+        if isinstance(custom, tuple):
+            return custom
+    return MOTIF_COLORS.get(normalized, DEFAULT_COLOR)
     # RNA 3D Atlas
     'HL': {'color': 'red', 'description': 'Hairpin loops (Atlas)'},
     'IL': {'color': 'cyan', 'description': 'Internal loops (Atlas)'},

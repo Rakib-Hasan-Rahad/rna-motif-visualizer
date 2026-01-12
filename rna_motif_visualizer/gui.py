@@ -381,6 +381,7 @@ class MotifVisualizerGUI:
 │  rna_instance <TYPE> <NO>    View single instance (zoom + details)   │
 │  rna_toggle <TYPE> <on|off>  Toggle motif visibility                 │
 │  rna_bg_color <COLOR>        Change background color (e.g., gray80)  │
+│  rna_color <TYPE> <COLOR>    Change motif color (e.g., rna_color HL blue) │
 │  rna_colors                  Show color legend for motif types       │
 ├──────────────────────────────────────────────────────────────────────┤
 │  INFORMATION                                                         │
@@ -797,6 +798,62 @@ def initialize_gui():
             color_module.print_color_legend()
     
     cmd.extend('rna_colors', show_colors)
+    
+    def set_motif_color(motif_type='', color=''):
+        """PyMOL command: Change color of a specific motif type.
+        
+        Usage:
+            rna_color HL red         Change HL to red
+            rna_color GNRA blue      Change GNRA to blue
+            rna_color IL 0.5 1.0 0.5 Change IL to RGB values
+        
+        Available colors: red, green, blue, yellow, cyan, magenta, orange,
+                         pink, purple, teal, gold, coral, turquoise, etc.
+        """
+        if not motif_type:
+            print("\nUsage: rna_color <MOTIF_TYPE> <COLOR>")
+            print("Examples:")
+            print("  rna_color HL red")
+            print("  rna_color GNRA blue")
+            print("  rna_color IL green")
+            print("\nAvailable colors: red, green, blue, yellow, cyan, magenta,")
+            print("                  orange, pink, purple, teal, gold, coral, etc.")
+            return
+        
+        if not color:
+            gui.logger.error("Please specify a color")
+            gui.logger.error("Example: rna_color HL red")
+            return
+        
+        from . import colors as color_module
+        
+        motif_arg = str(motif_type).strip().upper()
+        color_arg = str(color).strip().lower()
+        
+        # Set the custom color
+        result = color_module.set_custom_motif_color(motif_arg, color_arg)
+        
+        gui.logger.success(f"Changed {motif_arg} color to {color_arg}")
+        
+        # Re-apply color to currently loaded motifs if any
+        loaded_motifs = gui.viz_manager.motif_loader.get_loaded_motifs()
+        if motif_arg in loaded_motifs:
+            info = loaded_motifs[motif_arg]
+            structure_name = info.get('structure_name')
+            main_selection = info.get('main_selection')
+            
+            # Re-color the motif residues in the structure
+            if main_selection:
+                try:
+                    color_module.set_motif_color_in_pymol(cmd, main_selection, motif_arg)
+                    gui.logger.info(f"Applied new color to {motif_arg} residues")
+                except Exception as e:
+                    gui.logger.debug(f"Could not apply color: {e}")
+        
+        print(f"\n  {motif_arg} is now colored {color_arg}")
+        print(f"  Use 'rna_show {motif_arg}' or 'rna_all' to see the change\n")
+    
+    cmd.extend('rna_color', set_motif_color)
     
     gui.logger.success("RNA Motif Visualizer GUI initialized")
     gui.logger.info("")
