@@ -97,8 +97,10 @@ class UnifiedMotifLoader:
     """
     Unified motif loader that works with any database provider.
     
-    Uses the database registry to load motifs from the active database
-    or any specified database provider.
+    Uses the source selector to automatically find the best data source:
+    1. Local bundled databases (fast, offline)
+    2. BGSU RNA 3D Hub API (comprehensive, ~3000+ PDBs)
+    3. Rfam API (named motifs)
     """
     
     def __init__(self, cmd, database_dir: str):
@@ -114,19 +116,24 @@ class UnifiedMotifLoader:
         self.logger = get_logger()
         self.selector = MotifSelector(cmd)
         self.loaded_motifs: Dict[str, Dict] = {}  # Track loaded motif objects
+        self._last_source_used: Optional[str] = None
         
         # Get registry
         self._registry = get_registry()
     
     def load_motifs(self, structure_name: str, pdb_id: str,
-                   provider_id: Optional[str] = None) -> Dict:
+                   provider_id: Optional[str] = None,
+                   force_refresh: bool = False) -> Dict:
         """
         Load all available motifs for a structure.
+        
+        Uses smart source selection: tries local first, then APIs if needed.
         
         Args:
             structure_name (str): Name of structure in PyMOL
             pdb_id (str): PDB ID to look up motifs for
-            provider_id (str): Optional specific provider to use (uses active if None)
+            provider_id (str): Optional specific provider to use (auto-select if None)
+            force_refresh (bool): Force re-fetch from API (ignore cache)
         
         Returns:
             dict: Dictionary of loaded motifs: {motif_type: {details}}
@@ -135,30 +142,48 @@ class UnifiedMotifLoader:
             self.loaded_motifs = {}
             pdb_id = pdb_id.upper()
             
-            # Get provider
-            if provider_id:
-                provider = self._registry.get_provider(provider_id)
+            # Try to use source selector for smart source selection
+            from .database import get_source_selector
+            source_selector = get_source_selector()
+            
+            if source_selector and not provider_id:
+                # Use smart source selection
+                available_motifs, source_used = source_selector.get_motifs_for_pdb(
+                    pdb_id, 
+                    source_override=provider_id,
+                    force_refresh=force_refresh
+                )
+                self._last_source_used = source_used
+                source_name = source_used or "unknown"
             else:
-                provider = self._registry.get_active_provider()
-            
-            if not provider:
-                self.logger.error("No database provider available")
-                return {}
-            
-            # Get motifs for this PDB
-            available_motifs = provider.get_motifs_for_pdb(pdb_id)
+                # Fall back to registry-based provider selection
+                if provider_id:
+                    provider = self._registry.get_provider(provider_id)
+                else:
+                    provider = self._registry.get_active_provider()
+                
+                if not provider:
+                    self.logger.error("No database provider available")
+                    return {}
+                
+                available_motifs = provider.get_motifs_for_pdb(pdb_id)
+                source_name = provider.info.name if hasattr(provider, 'info') else provider_id
+                self._last_source_used = provider_id
             
             if not available_motifs:
-                self.logger.warning(f"No motifs found for PDB {pdb_id} in {provider.info.name}")
+                self.logger.warning(f"No motifs found for PDB {pdb_id}")
+                self.logger.info("Tip: This PDB may not have RNA motif annotations in any database")
                 return {}
             
             total_count = sum(len(instances) for instances in available_motifs.values())
-            self.logger.info(f"Found {total_count} motifs in {pdb_id} ({provider.info.name})")
+            self.logger.info(f"Found {total_count} motifs in {pdb_id} (source: {source_name})")
             
             # Process each motif type
             for motif_type, instances in available_motifs.items():
                 try:
-                    self._load_motif_type(structure_name, pdb_id, motif_type, instances)
+                    # Handle prefixed motif types from combined sources (e.g., "bgsu_api:HL")
+                    display_type = motif_type.split(':')[-1] if ':' in motif_type else motif_type
+                    self._load_motif_type(structure_name, pdb_id, display_type, instances)
                 except Exception as e:
                     self.logger.error(f"Error loading {motif_type} motifs: {e}")
                     continue
@@ -167,7 +192,13 @@ class UnifiedMotifLoader:
             
         except Exception as e:
             self.logger.error(f"Failed to load motifs: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
+    
+    def get_last_source_used(self) -> Optional[str]:
+        """Get the data source used for the last load operation."""
+        return self._last_source_used
     
     def _load_motif_type(self, structure_name: str, pdb_id: str,
                         motif_type: str, instances: List,
@@ -540,7 +571,8 @@ class VisualizationManager:
     def _print_motif_summary_table(self, pdb_id: str, motifs: Dict,
                                    provider_id: Optional[str] = None) -> None:
         """
-        Print a detailed summary table of loaded motifs to PyMOL console.
+        Print a simplified summary table of loaded motifs to PyMOL console.
+        Shows only motif types and their frequencies.
         
         Args:
             pdb_id: PDB ID
@@ -556,80 +588,337 @@ class VisualizationManager:
         db_name = provider.info.name if provider else "Unknown"
         
         # Build the table
-        print("\n" + "=" * 80)
-        print(f"  MOTIF DETECTION SUMMARY - {pdb_id}")
-        print("=" * 80)
+        print("\n" + "=" * 50)
+        print(f"  MOTIF SUMMARY - {pdb_id}")
+        print("=" * 50)
         print(f"  Database: {db_name}")
-        print("-" * 80)
+        print("-" * 50)
         
         # Header
-        print(f"  {'MOTIF TYPE':<15} {'COUNT':>8} {'CHAINS':<20} {'RESIDUE RANGE':<30}")
-        print("-" * 80)
+        print(f"  {'MOTIF TYPE':<20} {'INSTANCES':>12}")
+        print("-" * 50)
         
         total_motifs = 0
-        all_chains = set()
         
         for motif_type, info in sorted(motifs.items()):
             count = info.get('count', 0)
             total_motifs += count
+            print(f"  {motif_type:<20} {count:>12}")
+        
+        print("-" * 50)
+        print(f"  {'TOTAL':<20} {total_motifs:>12}")
+        print("=" * 50)
+        print("\n  Next steps:")
+        if total_motifs > 0:
+            # Find the first motif type to suggest
+            first_motif = None
+            for motif_type in sorted(motifs.keys()):
+                if motifs[motif_type].get('count', 0) > 0:
+                    first_motif = motif_type
+                    break
+            if first_motif:
+                print(f"    rna_show {first_motif:<20}  Highlight & view {first_motif} instances")
+            print(f"    rna_summary              Display this summary again")
+            print(f"    rna_all                  Show all motifs (default view)")
+        print("=" * 50 + "\n")
+    
+    def show_motif_type(self, motif_type: str) -> bool:
+        """
+        Show only a specific motif type, hide all others.
+        Creates individual objects for each instance.
+        Prints instance table with No., Chain, Residue Range.
+        
+        Args:
+            motif_type: Motif type to show (e.g., 'GNRA', 'HL')
             
-            # Extract chain and residue info from motif details
-            chains = set()
-            residue_ranges = {}
+        Returns:
+            True if successful
+        """
+        motif_type = motif_type.upper().strip()
+        loaded_motifs = self.motif_loader.get_loaded_motifs()
+        
+        if motif_type not in loaded_motifs:
+            self.logger.error(f"Motif type '{motif_type}' not loaded")
+            self.logger.info(f"Available: {', '.join(loaded_motifs.keys())}")
+            return False
+        
+        # Hide all other motif objects
+        for mt, info in loaded_motifs.items():
+            obj_name = info.get('object_name')
+            if obj_name:
+                if mt == motif_type:
+                    self.cmd.enable(obj_name)
+                    self.cmd.show('cartoon', obj_name)
+                else:
+                    self.cmd.disable(obj_name)
+        
+        # Get motif details
+        info = loaded_motifs[motif_type]
+        motif_details = info.get('motif_details', [])
+        structure_name = info.get('structure_name')
+        
+        # Create individual objects for each instance
+        self._create_instance_objects(motif_type, motif_details, structure_name)
+        
+        # Print instance table
+        self._print_motif_instance_table(motif_type, motif_details)
+        
+        self.logger.success(f"Showing {len(motif_details)} {motif_type} instances")
+        
+        # Print follow-up suggestions
+        print("  Next steps:")
+        print(f"    rna_instance {motif_type} <NO>     View specific instance (1-{len(motif_details)})")
+        print(f"    rna_show <OTHER_MOTIF>       Show different motif type")
+        print(f"    rna_all                      Show all motifs")
+        print()
+        return True
+    
+    def _create_instance_objects(self, motif_type: str, motif_details: List[Dict],
+                                  structure_name: str) -> None:
+        """
+        Create individual PyMOL objects for each motif instance.
+        
+        Args:
+            motif_type: Motif type
+            motif_details: List of motif instance details
+            structure_name: Name of the structure in PyMOL
+        """
+        from .utils.parser import SelectionParser
+        
+        for idx, detail in enumerate(motif_details, 1):
+            instance_id = detail.get('instance_id', f'{motif_type}_{idx:03d}')
+            residues = detail.get('residues', [])
             
-            motif_details = info.get('motif_details', [])
-            for detail in motif_details:
-                residues = detail.get('residues', [])
-                for res in residues:
-                    # ResidueSpec.to_tuple() returns (nucleotide, residue_number, chain)
-                    if isinstance(res, tuple) and len(res) >= 3:
-                        nucleotide, resi, chain = res[0], res[1], res[2]
-                        chains.add(chain)
-                        all_chains.add(chain)
-                        if chain not in residue_ranges:
-                            residue_ranges[chain] = {'min': resi, 'max': resi}
-                        else:
-                            residue_ranges[chain]['min'] = min(residue_ranges[chain]['min'], resi)
-                            residue_ranges[chain]['max'] = max(residue_ranges[chain]['max'], resi)
+            if not residues:
+                continue
             
-            # Format chains
-            chains_str = ', '.join(sorted(chains)) if chains else '-'
+            # Build selection for this instance
+            chain_residues = {}
+            for res in residues:
+                if isinstance(res, tuple) and len(res) >= 3:
+                    nucleotide, resi, chain = res[0], res[1], res[2]
+                    if chain not in chain_residues:
+                        chain_residues[chain] = []
+                    chain_residues[chain].append(resi)
             
-            # Format residue ranges
-            if residue_ranges:
-                range_parts = []
-                for chain in sorted(residue_ranges.keys())[:3]:  # Show first 3 chains
-                    r = residue_ranges[chain]
-                    range_parts.append(f"{chain}:{r['min']}-{r['max']}")
-                if len(residue_ranges) > 3:
-                    range_parts.append(f"+{len(residue_ranges)-3} more")
-                residue_str = ', '.join(range_parts)
-            else:
-                residue_str = '-'
+            # Create selection
+            selections = []
+            for chain, resi_list in chain_residues.items():
+                sel = SelectionParser.create_selection_string(chain, sorted(resi_list))
+                if sel:
+                    selections.append(f"({sel})")
+            
+            if not selections:
+                continue
+            
+            combined_sel = " or ".join(selections)
+            instance_sel = f"({structure_name}) and ({combined_sel})"
+            
+            # Create object name: MOTIF_NO (e.g., GNRA_1, GNRA_2)
+            obj_name = f"{motif_type}_{idx}"
+            
+            # Create the object
+            try:
+                self.cmd.create(obj_name, instance_sel)
+                self.cmd.show('cartoon', obj_name)
+                self.cmd.set('cartoon_nucleic_acid_mode', 4, obj_name)
+                self.cmd.set('cartoon_tube_radius', 0.4, obj_name)
+                colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type)
+                # Initially disable - will be shown by rna_instance command
+                self.cmd.disable(obj_name)
+            except Exception as e:
+                self.logger.debug(f"Could not create object {obj_name}: {e}")
+    
+    def _print_motif_instance_table(self, motif_type: str, motif_details: List[Dict]) -> None:
+        """
+        Print detailed instance table for a motif type.
+        
+        Args:
+            motif_type: Motif type
+            motif_details: List of motif instance details
+        """
+        print("\n" + "=" * 70)
+        print(f"  {motif_type} MOTIF INSTANCES")
+        print("=" * 70)
+        print(f"  Total Instances: {len(motif_details)}")
+        print("-" * 70)
+        print(f"  {'NO.':<6} {'CHAIN':<10} {'RESIDUE RANGE':<25} {'NUCLEOTIDES':<25}")
+        print("-" * 70)
+        
+        for idx, detail in enumerate(motif_details, 1):
+            residues = detail.get('residues', [])
+            
+            if not residues:
+                print(f"  {idx:<6} {'-':<10} {'-':<25} {'-':<25}")
+                continue
+            
+            # Group by chain
+            chain_info = {}
+            for res in residues:
+                if isinstance(res, tuple) and len(res) >= 3:
+                    nucleotide, resi, chain = res[0], res[1], res[2]
+                    if chain not in chain_info:
+                        chain_info[chain] = {'min': resi, 'max': resi, 'nucs': []}
+                    else:
+                        chain_info[chain]['min'] = min(chain_info[chain]['min'], resi)
+                        chain_info[chain]['max'] = max(chain_info[chain]['max'], resi)
+                    if nucleotide:
+                        chain_info[chain]['nucs'].append(nucleotide)
+            
+            # Format output
+            chains = ', '.join(sorted(chain_info.keys()))
+            
+            # Residue ranges
+            range_parts = []
+            for chain in sorted(chain_info.keys()):
+                ci = chain_info[chain]
+                range_parts.append(f"{chain}:{ci['min']}-{ci['max']}")
+            residue_range = ', '.join(range_parts)
+            
+            # Nucleotides
+            all_nucs = []
+            for chain in sorted(chain_info.keys()):
+                all_nucs.extend(chain_info[chain]['nucs'])
+            nucs_str = ''.join(all_nucs[:20])
+            if len(all_nucs) > 20:
+                nucs_str += '...'
             
             # Truncate if too long
-            if len(chains_str) > 18:
-                chains_str = chains_str[:15] + '...'
-            if len(residue_str) > 28:
-                residue_str = residue_str[:25] + '...'
+            if len(residue_range) > 23:
+                residue_range = residue_range[:20] + '...'
             
-            print(f"  {motif_type:<15} {count:>8} {chains_str:<20} {residue_str:<30}")
+            print(f"  {idx:<6} {chains:<10} {residue_range:<25} {nucs_str:<25}")
         
-        print("-" * 80)
-        print(f"  {'TOTAL':<15} {total_motifs:>8} {len(all_chains):>3} chains")
-        print("=" * 80)
+        print("-" * 70)
+        print("\n  To view a specific instance:")
+        print(f"    rna_instance {motif_type} <NO>")
+        print(f"    Example: rna_instance {motif_type} 1")
+        print("=" * 70 + "\n")
+    
+    def show_motif_instance(self, motif_type: str, instance_no: int) -> bool:
+        """
+        Show only a specific instance of a motif type.
         
-        # Color legend
-        print("\n  COLOR LEGEND:")
-        from . import colors as color_module
-        for motif_type in sorted(motifs.keys()):
-            color = color_module.MOTIF_COLORS.get(motif_type, color_module.DEFAULT_COLOR)
-            color_name = color_module.PYMOL_COLOR_NAMES.get(motif_type, 'custom')
-            # Convert RGB to hex-like description
-            r, g, b = int(color[0]*255), int(color[1]*255), int(color[2]*255)
-            print(f"    {motif_type:<10} = {color_name:<12} (RGB: {r},{g},{b})")
+        Args:
+            motif_type: Motif type (e.g., 'GNRA')
+            instance_no: Instance number (1-indexed)
+            
+        Returns:
+            True if successful
+        """
+        motif_type = motif_type.upper().strip()
+        loaded_motifs = self.motif_loader.get_loaded_motifs()
         
-        print("=" * 80 + "\n")
+        if motif_type not in loaded_motifs:
+            self.logger.error(f"Motif type '{motif_type}' not loaded")
+            return False
+        
+        info = loaded_motifs[motif_type]
+        motif_details = info.get('motif_details', [])
+        
+        if instance_no < 1 or instance_no > len(motif_details):
+            self.logger.error(f"Instance {instance_no} not found. Valid range: 1-{len(motif_details)}")
+            return False
+        
+        # Hide all motif type objects
+        for mt, mt_info in loaded_motifs.items():
+            obj_name = mt_info.get('object_name')
+            if obj_name:
+                self.cmd.disable(obj_name)
+        
+        # Hide all instance objects for this motif type
+        for i in range(1, len(motif_details) + 1):
+            obj_name = f"{motif_type}_{i}"
+            try:
+                self.cmd.disable(obj_name)
+            except:
+                pass
+        
+        # Show only the requested instance
+        instance_obj = f"{motif_type}_{instance_no}"
+        try:
+            self.cmd.enable(instance_obj)
+            self.cmd.show('cartoon', instance_obj)
+            self.cmd.zoom(instance_obj, 5)  # Zoom to the instance
+        except Exception as e:
+            self.logger.error(f"Could not show instance: {e}")
+            return False
+        
+        # Print instance details
+        detail = motif_details[instance_no - 1]
+        self._print_single_instance_info(motif_type, instance_no, detail)
+        
+        # Print follow-up suggestions
+        print("  Next steps:")
+        if instance_no > 1:
+            print(f"    rna_instance {motif_type} {instance_no-1}         View previous instance")
+        if instance_no < len(motif_details):
+            print(f"    rna_instance {motif_type} {instance_no+1}         View next instance")
+        print(f"    rna_show {motif_type}               Show all {motif_type} instances")
+        print(f"    rna_all                      Show all motifs")
+        print()
+        
+        return True
+    
+    def _print_single_instance_info(self, motif_type: str, instance_no: int, 
+                                     detail: Dict) -> None:
+        """Print information about a single motif instance."""
+        residues = detail.get('residues', [])
+        instance_id = detail.get('instance_id', f'{motif_type}_{instance_no}')
+        annotation = detail.get('annotation', '')
+        
+        print("\n" + "=" * 50)
+        print(f"  {motif_type} INSTANCE #{instance_no}")
+        print("=" * 50)
+        print(f"  Instance ID: {instance_id}")
+        if annotation:
+            print(f"  Annotation: {annotation}")
+        print(f"  Residues: {len(residues)}")
+        print("-" * 50)
+        
+        # List all residues
+        print(f"  {'CHAIN':<8} {'RESI':<8} {'NUCLEOTIDE':<12}")
+        print("-" * 50)
+        
+        for res in residues:
+            if isinstance(res, tuple) and len(res) >= 3:
+                nucleotide, resi, chain = res[0], res[1], res[2]
+                print(f"  {chain:<8} {resi:<8} {nucleotide:<12}")
+        
+        print("=" * 50)
+        print(f"  Object: {motif_type}_{instance_no}")
+        print("=" * 50 + "\n")
+    
+    def show_all_motifs(self) -> None:
+        """Show all loaded motifs (reset to default view)."""
+        loaded_motifs = self.motif_loader.get_loaded_motifs()
+        
+        for motif_type, info in loaded_motifs.items():
+            obj_name = info.get('object_name')
+            if obj_name:
+                self.cmd.enable(obj_name)
+                self.cmd.show('cartoon', obj_name)
+            
+            # Disable individual instance objects
+            motif_details = info.get('motif_details', [])
+            for i in range(1, len(motif_details) + 1):
+                try:
+                    self.cmd.disable(f"{motif_type}_{i}")
+                except:
+                    pass
+        
+        self.logger.info("All motifs shown")
+        
+        # Print follow-up suggestions
+        print("\n  Next steps:")
+        if loaded_motifs:
+            first_motif = next(iter(sorted(loaded_motifs.keys())), None)
+            if first_motif:
+                print(f"    rna_show {first_motif:<20}  Highlight specific motif type")
+        print(f"    rna_summary              View motif summary table")
+        print(f"    rna_load <PDB_ID>        Load a different structure")
+        print()
+
 
 
 # Backwards compatibility aliases

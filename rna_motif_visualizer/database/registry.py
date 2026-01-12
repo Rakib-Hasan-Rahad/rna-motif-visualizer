@@ -237,34 +237,70 @@ def get_registry() -> DatabaseRegistry:
     return _registry_instance
 
 
-def initialize_registry(motif_database_path: str) -> DatabaseRegistry:
+def initialize_registry(motif_database_path: str, enable_api: bool = True) -> DatabaseRegistry:
     """
-    Initialize registry with default providers.
+    Initialize registry with default providers (local + API).
     
     Args:
         motif_database_path: Path to motif_database directory
+        enable_api: Whether to enable API providers for online data
         
     Returns:
         Initialized registry
     """
     from .atlas_provider import RNA3DAtlasProvider
     from .rfam_provider import RfamProvider
+    from .cache_manager import get_cache_manager
     
     registry = get_registry()
     db_path = Path(motif_database_path)
+    cache_manager = get_cache_manager()
     
-    # Try to register RNA 3D Atlas provider
+    # ========================================
+    # LOCAL PROVIDERS (bundled data, fast)
+    # ========================================
+    
+    # Try to register RNA 3D Atlas provider (local)
     atlas_path = db_path / 'RNA 3D motif atlas'
     if atlas_path.exists():
         atlas_provider = RNA3DAtlasProvider(str(atlas_path))
         if registry.register_provider(atlas_provider, 'atlas'):
-            print(f"Registered RNA 3D Atlas database")
+            print(f"Registered RNA 3D Atlas database (local)")
     
-    # Try to register Rfam provider
+    # Try to register Rfam provider (local)
     rfam_path = db_path / 'Rfam motif database'
     if rfam_path.exists():
         rfam_provider = RfamProvider(str(rfam_path))
         if registry.register_provider(rfam_provider, 'rfam'):
-            print(f"Registered Rfam motif database")
+            print(f"Registered Rfam motif database (local)")
+    
+    # ========================================
+    # API PROVIDERS (online, comprehensive)
+    # ========================================
+    
+    if enable_api:
+        try:
+            from .bgsu_api_provider import BGSUAPIProvider
+            from .rfam_api_provider import RfamAPIProvider
+            
+            # Register BGSU RNA 3D Hub API provider
+            bgsu_api = BGSUAPIProvider(cache_manager=cache_manager)
+            if registry.register_provider(bgsu_api, 'bgsu_api'):
+                print(f"Registered BGSU RNA 3D Hub API (~3000+ PDBs)")
+            
+            # Register Rfam API provider
+            rfam_api = RfamAPIProvider(cache_manager=cache_manager)
+            if registry.register_provider(rfam_api, 'rfam_api'):
+                print(f"Registered Rfam API (named motifs)")
+                
+        except Exception as e:
+            print(f"Note: API providers not available ({e})")
+    
+    # Initialize source selector with all providers
+    try:
+        from .source_selector import initialize_source_selector
+        initialize_source_selector(registry.get_all_providers(), cache_manager)
+    except Exception as e:
+        print(f"Note: Source selector not initialized ({e})")
     
     return registry

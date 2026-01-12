@@ -1,314 +1,392 @@
 # RNA Motif Visualizer
 
-A PyMOL plugin for visualizing RNA structural motifs. It automatically detects and highlights RNA motifs like hairpin loops, internal loops, junctions, GNRA tetraloops, kink-turns, and many others directly on your RNA structure.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyMOL](https://img.shields.io/badge/PyMOL-Plugin-blue.svg)](https://pymol.org/)
+[![Version](https://img.shields.io/badge/Version-2.1.0-green.svg)](#)
 
-This plugin works with multiple motif databases - the RNA 3D Motif Atlas and the Rfam Motif Database - and you can easily add your own motif data.
+A powerful PyMOL plugin for visualizing RNA structural motifs. Automatically detects and highlights RNA motifs like hairpin loops, internal loops, junctions, GNRA tetraloops, kink-turns, and many others directly on your RNA structure.
+
+**🚀 Now supports 3000+ PDB structures via online APIs!**
+
+![RNA Motif Visualizer Banner](images/banner.png)
+<!-- PLACEHOLDER: Add banner image showing the plugin in action -->
 
 ---
 
-## Installation
+## ✨ Key Features
 
-### Step 1 - Download the Plugin
+| Feature | Description |
+|---------|-------------|
+| 🔬 **Multi-Source Data** | Local database + BGSU API + Rfam API for comprehensive coverage |
+| 🎨 **Automatic Coloring** | Each motif type gets distinct colors for easy identification |
+| 📊 **Instance Explorer** | View individual motif instances with detailed residue information |
+| 💡 **Smart Suggestions** | Contextual help guides you through each command |
+| 💾 **Intelligent Caching** | API responses cached for 30 days for fast repeated access |
+| 🔌 **Extensible** | Add your own motif databases easily |
 
-Download or clone this repository to your computer:
+---
 
-```
+## 📦 Installation
+
+### Step 1: Download the Plugin
+
+```bash
 git clone https://github.com/Rakib-Hasan-Rahad/rna-motif-visualizer.git
 ```
 
-Or download and extract the ZIP file.
+Or [download the ZIP file](https://github.com/Rakib-Hasan-Rahad/rna-motif-visualizer/archive/refs/heads/main.zip) and extract it.
 
-### Step 2 - Install in PyMOL
+### Step 2: Install in PyMOL
 
-1. Open PyMOL
-2. Go to the **Plugin** menu at the top
-3. Click **Plugin Manager**
-4. Go to the **Settings** tab
-5. Click **Add new directory**
-6. Navigate to and select the `rna_motif_visualizer` folder (the one inside the main project folder)
-7. Click OK and close the Plugin Manager
-8. Restart PyMOL
+1. Open **PyMOL**
+2. Go to **Plugin** → **Plugin Manager**
+3. Click the **Settings** tab
+4. Click **Add new directory**
+5. Navigate to and select the `rna_motif_visualizer` folder
+6. Click **OK** and close Plugin Manager
+7. **Restart PyMOL**
 
-If the installation worked, you will see a welcome message when PyMOL starts showing the available databases and commands.
+![Installation Steps](images/installation_steps.png)
+<!-- PLACEHOLDER: Screenshot showing Plugin Manager settings -->
 
-![Installation Screenshot](images/1.png)
+### Step 3: Verify Installation
+
+You should see this welcome message when PyMOL starts:
+
+![Installation Success](images/installation_success.png)
+<!-- PLACEHOLDER: Screenshot of welcome message in PyMOL console -->
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-Load a structure with motif highlighting:
+### Load a Structure
 
 ```
 rna_load 1S72
 ```
 
-Thats it. The plugin will download the structure from RCSB, detect all motifs in the database, and display them with different colors.
+That's it! The plugin will:
+1. Download the structure from RCSB PDB
+2. Detect all motifs from the database
+3. Display them with different colors
+4. Print a summary table with suggestions
 
-![Motif Visualization](images/2.png)
+![Quick Start Demo](images/quickstart_demo.png)
+<!-- PLACEHOLDER: Screenshot showing loaded structure with colored motifs -->
+
+### Follow the Suggestions
+
+After each command, look at the console for **"Next steps"** suggestions:
+
+```
+==================================================
+  MOTIF SUMMARY - 1S72
+==================================================
+  MOTIF TYPE            INSTANCES
+--------------------------------------------------
+  GNRA                         3
+  HL                           5
+  IL                           2
+==================================================
+
+  Next steps:
+    rna_show GNRA              Highlight & view GNRA instances
+    rna_summary                Display this summary again
+    rna_all                    Show all motifs (default view)
+```
+
+![Console Suggestions](images/console_suggestions.png)
+<!-- PLACEHOLDER: Screenshot of console output with suggestions -->
 
 ---
 
-## Commands
+## 📖 Complete Command Reference
 
-Here are all the commands available in the plugin:
+### Core Commands
 
-### rna_load
+| Command | Description | Example |
+|---------|-------------|---------|
+| `rna_load <PDB>` | Load structure and show motifs | `rna_load 1S72` |
+| `rna_show <TYPE>` | Highlight specific motif type | `rna_show GNRA` |
+| `rna_instance <TYPE> <NO>` | View single instance | `rna_instance GNRA 1` |
+| `rna_all` | Show all motifs (reset view) | `rna_all` |
+| `rna_summary` | Display motif summary table | `rna_summary` |
 
-Load a PDB structure and visualize its motifs.
+### Data Source Commands
 
-```
-rna_load 1S72
-rna_load 1S72, database=atlas
-rna_load 1S72, database=rfam
-rna_load /path/to/your/file.pdb
-```
+| Command | Description | Example |
+|---------|-------------|---------|
+| `rna_source <MODE>` | Set data source mode | `rna_source bgsu` |
+| `rna_source_info` | Show current source config | `rna_source_info` |
+| `rna_refresh` | Force refresh from API | `rna_refresh` |
 
-Options:
-- First argument is the PDB ID or file path
-- `database` - which motif database to use (atlas or rfam)
-- `bg_color` - background color for non-motif regions (default: gray80)
+### Utility Commands
 
-### rna_switch
-
-Switch to a different database and reload motifs for the current structure.
-
-```
-rna_switch atlas
-rna_switch rfam
-```
-
-### rna_toggle
-
-Show or hide specific motif types.
-
-```
-rna_toggle HL off
-rna_toggle IL on
-rna_toggle GNRA off
-```
-
-### rna_status
-
-Show current structure and database information.
-
-```
-rna_status
-```
-
-### rna_databases
-
-List all available motif databases.
-
-```
-rna_databases
-```
-
-### rna_summary
-
-Print a detailed table of detected motifs.
-
-```
-rna_summary
-```
-
-### rna_bg_color
-
-Change the background color of non-motif residues.
-
-```
-rna_bg_color white
-rna_bg_color gray50
-```
+| Command | Description | Example |
+|---------|-------------|---------|
+| `rna_switch <DB>` | Switch database | `rna_switch rfam` |
+| `rna_toggle <TYPE> on/off` | Toggle motif visibility | `rna_toggle HL off` |
+| `rna_status` | Show current status | `rna_status` |
+| `rna_databases` | List available databases | `rna_databases` |
+| `rna_bg_color <COLOR>` | Change background color | `rna_bg_color white` |
 
 ---
 
-## Understanding the Display
+## 🔄 Data Source Modes
 
-When you load a structure:
+The plugin can fetch motif data from multiple sources:
 
-- The RNA backbone appears in gray (or your chosen background color)
-- Each motif type gets a distinct color
-- Motif objects appear in the right panel of PyMOL
-- You can click on individual motif objects to select them
-- The console shows a summary table with motif counts and locations
+| Mode | Command | Description |
+|------|---------|-------------|
+| **Auto** | `rna_source auto` | Smart selection (default) - tries local first, then APIs |
+| **Local** | `rna_source local` | Offline mode - bundled database only |
+| **BGSU** | `rna_source bgsu` | BGSU RNA 3D Hub API (~3000+ structures) |
+| **Rfam** | `rna_source rfam` | Rfam API (named motifs like GNRA, K-turn) |
+| **All** | `rna_source all` | Combine results from all sources |
 
-![Motif Panel](images/3.png)
+### Available Motifs by Source
 
-### Color Legend
+| Source | Motif Types |
+|--------|-------------|
+| **Local/BGSU** | HL (Hairpin), IL (Internal), J3-J7 (Junctions) |
+| **Rfam** | GNRA, UNCG, K-turn, T-loop, C-loop, U-turn, and more |
 
-The plugin assigns colors to different motif types:
-
-**RNA 3D Atlas motifs:**
-- HL (Hairpin Loops) - Red
-- IL (Internal Loops) - Orange
-- J3 (3-way Junctions) - Yellow
-- J4 (4-way Junctions) - Green
-- J5, J6, J7 - Various colors
-
-**Rfam motifs:**
-- GNRA - Forest green
-- K-turn - Marine blue
-- Sarcin-ricin - Firebrick red
-- T-loop - Pink
-- UNCG - Olive
-- And many more
+![Data Sources](images/data_sources.png)
+<!-- PLACEHOLDER: Diagram showing data flow from different sources -->
 
 ---
 
-## Supported Databases
+## 🎨 Understanding the Display
 
-### RNA 3D Motif Atlas
+### Motif Colors
 
-This database comes from the BGSU RNA Group and contains geometrically defined motif families extracted from representative RNA structures. It includes:
+Each motif type is assigned a distinct color:
 
-- Hairpin loops (HL)
-- Internal loops (IL)
-- 3-way to 7-way junctions (J3 through J7)
+| Motif Type | Color | Description |
+|------------|-------|-------------|
+| HL | Red | Hairpin Loops |
+| IL | Orange | Internal Loops |
+| J3 | Yellow | 3-way Junctions |
+| J4 | Green | 4-way Junctions |
+| GNRA | Forest Green | GNRA Tetraloops |
+| K-turn | Marine Blue | Kink-turns |
+| T-loop | Pink | T-loops |
 
-The data format is JSON with alignment information linking motif positions to specific PDB residues.
+![Color Legend](images/color_legend.png)
+<!-- PLACEHOLDER: Visual color legend showing all motif colors -->
 
-Source: https://rna.bgsu.edu/rna3dhub/motifs
+### PyMOL Object Panel
+
+After loading, you'll see motif objects in the right panel:
+
+![Object Panel](images/object_panel.png)
+<!-- PLACEHOLDER: Screenshot of PyMOL object panel with motif objects -->
+
+- **Type Objects**: `GNRA`, `HL`, `IL` - contain all instances of that type
+- **Instance Objects**: `GNRA_1`, `GNRA_2` - individual instances (created after `rna_show`)
+
+---
+
+## 📊 Instance Explorer
+
+### View All Instances of a Type
+
+```
+rna_show GNRA
+```
+
+This displays an instance table:
+
+```
+======================================================================
+  GNRA MOTIF INSTANCES
+======================================================================
+  Total Instances: 3
+----------------------------------------------------------------------
+  NO.    CHAIN      RESIDUE RANGE             NUCLEOTIDES
+----------------------------------------------------------------------
+  1      A          A:100-104                 GAAA
+  2      A          A:250-254                 GUGA
+  3      B          B:50-54                   GCAA
+----------------------------------------------------------------------
+```
+
+![Instance Table](images/instance_table.png)
+<!-- PLACEHOLDER: Screenshot of instance table output in console -->
+
+### View Single Instance
+
+```
+rna_instance GNRA 1
+```
+
+This will:
+- Zoom to the instance
+- Show detailed residue information
+- Suggest next/previous instance navigation
+
+![Instance View](images/instance_view.png)
+<!-- PLACEHOLDER: Screenshot of zoomed instance with residue details -->
+
+---
+
+## 🗄️ Supported Databases
+
+### RNA 3D Motif Atlas (BGSU)
+
+From the BGSU RNA Group - geometrically defined motif families:
+
+- **Hairpin loops (HL)**
+- **Internal loops (IL)**
+- **3-way to 7-way junctions (J3-J7)**
+
+**Source**: https://rna.bgsu.edu/rna3dhub/motifs
 
 ### Rfam Motif Database
 
-This database contains curated RNA structural motifs from the Rfam database at EMBL-EBI. It includes well-known motifs like:
+Curated RNA structural motifs from EMBL-EBI:
 
-- GNRA tetraloops
-- UNCG tetraloops
-- Kink-turns (K-turns)
-- Sarcin-ricin loops
-- T-loops
-- C-loops
-- And more
+- **GNRA tetraloops**
+- **UNCG tetraloops**
+- **Kink-turns (K-turns)**
+- **Sarcin-ricin loops**
+- **T-loops, C-loops, U-turns**
+- And more...
 
-The data format is Stockholm (SEED files) commonly used in RNA sequence alignment.
-
-Source: https://rfam.org/search?q=entry_type:%22Motif%22
+**Source**: https://rfam.org
 
 ---
 
-## Using Your Own Database
+## 💾 Caching System
 
-The plugin is designed so you can use your own motif data. Here is how:
+API responses are cached locally for fast repeated access:
 
-### Adding RNA 3D Atlas Format Data
+| Setting | Value |
+|---------|-------|
+| **Cache Location** | `~/.rna_motif_visualizer_cache/` |
+| **Expiry** | 30 days |
+| **Force Refresh** | `rna_refresh` |
 
-1. Navigate to `rna_motif_visualizer/motif_database/RNA 3D motif atlas/`
-2. Add your JSON files following the Atlas naming convention (e.g., `hl_4.5.json`, `il_4.5.json`)
-3. The file should contain a JSON array of motif entries with alignment data
-4. Restart PyMOL
+To clear cache manually:
+```bash
+rm -rf ~/.rna_motif_visualizer_cache/
+```
 
-Each JSON entry needs:
-- `motif_id` - unique identifier for the motif class
-- `alignment` - dictionary mapping instance IDs to residue positions
-- Residue format: `PDB|Model|Chain|Nucleotide|ResidueNumber`
+---
 
-Example entry structure:
+## 🔧 Adding Custom Databases
+
+### Add RNA 3D Atlas Format Data
+
+1. Navigate to `rna_motif_visualizer/motif_database/`
+2. Add JSON files with motif data
+3. Restart PyMOL
+
+**JSON Format**:
 ```json
 {
   "motif_id": "HL_12345.1",
   "alignment": {
     "HL_1S72_001": {
       "1": "1S72|1|0|G|100",
-      "2": "1S72|1|0|A|101",
-      "3": "1S72|1|0|A|102"
+      "2": "1S72|1|0|A|101"
     }
   }
 }
 ```
 
-### Adding Rfam Format Data
+### Add Custom Colors
 
-1. Navigate to `rna_motif_visualizer/motif_database/Rfam motif database/`
-2. Create a new folder with your motif name (e.g., `my-motif/`)
-3. Inside that folder, create a file named `SEED` (no extension)
-4. The SEED file should be in Stockholm format
-5. Restart PyMOL
-
-The SEED file needs:
-- Standard Stockholm header (`# STOCKHOLM 1.0`)
-- Sequence entries in format: `PDBID_Chain/start-end   SEQUENCE`
-- Optional structure annotation (`#=GR ... SS`)
-
-Example SEED file:
-```
-# STOCKHOLM 1.0
-
-#=GF ID   my-motif
-#=GF DE   My custom RNA motif
-
-1S72_0/100-110    GAAACUUUUC
-#=GR 1S72_0/100-110 SS  (((...)))
-
-4V9F_A/200-210    GAAACUUUUC
-#=GR 4V9F_A/200-210 SS  (((...)))
-
-//
-```
-
-### Adding Colors for Custom Motifs
-
-If you add new motif types, you may want to assign them specific colors. Edit `rna_motif_visualizer/colors.py` and add entries to the `MOTIF_COLORS` dictionary:
+Edit `rna_motif_visualizer/colors.py`:
 
 ```python
 MOTIF_COLORS = {
-    # ... existing colors ...
-    'MY_MOTIF': (0.5, 0.8, 0.3),  # RGB values from 0 to 1
+    'MY_MOTIF': (0.5, 0.8, 0.3),  # RGB values 0-1
 }
 ```
 
 ---
 
-## Troubleshooting
+## 🐛 Troubleshooting
 
-**Plugin does not appear after installation**
-- Make sure you selected the `rna_motif_visualizer` folder, not the parent folder
-- Check that the folder contains `__init__.py` and `plugin.py`
-- Restart PyMOL completely
+| Problem | Solution |
+|---------|----------|
+| Plugin not appearing | Check you selected `rna_motif_visualizer` folder (not parent) |
+| No motifs found | Try `rna_source all` or different database |
+| API errors | Check internet connection, try `rna_source local` |
+| Slow loading | First API call is slow, subsequent calls use cache |
+| Colors look wrong | Update to latest version |
 
-**No motifs found for my structure**
-- Not all PDB structures are in the motif databases
-- Try switching databases with `rna_switch rfam` or `rna_switch atlas`
-- The databases contain specific PDB entries - your structure may not be included
+### Reset Everything
 
-**Motifs not showing when clicked in panel**
-- This can happen with structures that use unusual chain naming
-- The plugin handles most ribosomal structures (1S72, 1FFK, etc.) but some may need manual chain mapping
+```python
+# Clear all objects in PyMOL
+cmd.delete("all")
+cmd.reset()
 
-**Colors look striped or wrong**
-- This was a z-fighting issue in older versions
-- Make sure you have the latest version of the plugin
-
----
-
-## Supported PDB Structures
-
-The included databases contain motifs from a curated set of RNA structures. To see which structures are available:
-
-```
-rna_databases
+# Then reload
+rna_load 1S72
 ```
 
-This shows the count of PDB structures in each database. The RNA 3D Atlas typically covers more structures with broader motif definitions, while Rfam focuses on specific well-characterized motif types.
+---
+
+## 📚 Additional Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[TUTORIAL.md](TUTORIAL.md)** | Step-by-step tutorial with examples and expected outputs |
+| **[DEVELOPER.md](DEVELOPER.md)** | Developer guide, architecture, and contribution guidelines |
 
 ---
 
-## License
+## 🏗️ Project Structure
 
-MIT License
+```
+rna-motif-visualizer/
+├── rna_motif_visualizer/
+│   ├── __init__.py
+│   ├── plugin.py           # Plugin entry point
+│   ├── gui.py              # PyMOL commands
+│   ├── loader.py           # Core motif loading logic
+│   ├── colors.py           # Color definitions
+│   ├── database/           # Database providers
+│   │   ├── bgsu_api_provider.py
+│   │   ├── rfam_api_provider.py
+│   │   ├── cache_manager.py
+│   │   └── source_selector.py
+│   ├── motif_database/     # Local motif data
+│   └── utils/              # Utility modules
+├── images/                 # Documentation images
+├── README.md               # This file
+├── TUTORIAL.md             # User tutorial
+├── DEVELOPER.md            # Developer guide
+└── LICENSE
+```
 
 ---
 
-## Contributing
+## 📄 License
 
-Contributions are welcome. See the [Developer Documentation](DEVELOPER.md) for details on the project architecture and how to extend the plugin.
+MIT License - see [LICENSE](LICENSE) file.
 
 ---
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-- RNA 3D Motif Atlas from the BGSU RNA Group
-- Rfam database from EMBL-EBI
-- PyMOL molecular visualization system
+- **RNA 3D Motif Atlas** - BGSU RNA Group
+- **Rfam Database** - EMBL-EBI
+- **PyMOL** - Schrödinger, LLC
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! See [DEVELOPER.md](DEVELOPER.md) for guidelines.
+
+---
+
+<p align="center">
+  <b>Happy RNA Visualization! 🧬</b>
+</p>
 
