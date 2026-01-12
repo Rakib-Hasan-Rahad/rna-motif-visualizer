@@ -951,7 +951,7 @@ class VisualizationManager:
         self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
         self.cmd.color('gray80', f"{structure_name} and polymer.nucleic")
         
-        # Step 3: Create a separate object for this instance
+        # Step 3: Color the instance residues WITHIN the main structure
         detail = motif_details[instance_no - 1]
         residues = detail.get('residues', [])
         instance_obj = f"{motif_type}_{instance_no}"
@@ -979,27 +979,27 @@ class VisualizationManager:
                 combined_sel = " or ".join(selections)
                 instance_sel = f"({structure_name}) and ({combined_sel})"
                 
-                # Check if object already exists, if not create it
+                # Color the instance residues WITHIN the main structure (no overlap)
+                colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)
+                
+                # Create object for the panel (disabled - just for reference)
                 existing_objects = self.cmd.get_object_list()
                 if instance_obj not in existing_objects:
                     try:
                         self.cmd.create(instance_obj, instance_sel)
+                        self.cmd.set('cartoon_nucleic_acid_mode', 4, instance_obj)
+                        self.cmd.set('cartoon_tube_radius', 0.4, instance_obj)
+                        colors.set_motif_color_in_pymol(self.cmd, instance_obj, motif_type)
+                        # Disable so it doesn't render (avoids overlap)
+                        self.cmd.disable(instance_obj)
                     except Exception as e:
                         self.logger.debug(f"Could not create instance object: {e}")
+                else:
+                    # Object exists, just disable it
+                    self.cmd.disable(instance_obj)
                 
-                # Enable and style the instance object
-                self.cmd.enable(instance_obj)
-                self.cmd.show('cartoon', instance_obj)
-                self.cmd.set('cartoon_nucleic_acid_mode', 4, instance_obj)
-                self.cmd.set('cartoon_tube_radius', 0.4, instance_obj)
-                colors.set_motif_color_in_pymol(self.cmd, instance_obj, motif_type)
-                
-                # NOTE: We do NOT hide residues from main structure
-                # Hiding them breaks the visual backbone connection
-                # The colored instance object renders on top of the gray structure
-                
-                # Zoom to the instance
-                self.cmd.zoom(instance_obj, 5)
+                # Zoom to the instance (using the selection, not the object)
+                self.cmd.zoom(instance_sel, 5)
         
         # Print instance details
         self._print_single_instance_info(motif_type, instance_no, detail)
