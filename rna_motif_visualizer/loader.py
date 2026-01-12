@@ -643,9 +643,12 @@ class VisualizationManager:
     
     def show_motif_type(self, motif_type: str) -> bool:
         """
-        Show only a specific motif type, hide all others.
-        Creates individual objects for each instance.
-        Prints instance table with No., Chain, Residue Range.
+        Show only a specific motif type highlighted, with full structure visible in gray.
+        
+        Workflow:
+        1. Show full PDB structure in gray80
+        2. Highlight the selected motif type in its color
+        3. Hide other motif type objects
         
         Args:
             motif_type: Motif type to show (e.g., 'GNRA', 'HL')
@@ -661,22 +664,42 @@ class VisualizationManager:
             self.logger.info(f"Available: {', '.join(loaded_motifs.keys())}")
             return False
         
-        # Hide all other motif objects
-        for mt, info in loaded_motifs.items():
-            obj_name = info.get('object_name')
-            if obj_name:
-                if mt == motif_type:
-                    self.cmd.enable(obj_name)
-                    self.cmd.show('cartoon', obj_name)
-                else:
-                    self.cmd.disable(obj_name)
-        
-        # Get motif details
+        # Get structure name from the loaded motif info
         info = loaded_motifs[motif_type]
+        structure_name = info.get('structure_name')
         motif_details = info.get('motif_details', [])
         
-        # NOTE: We do NOT create individual objects here to avoid crashes with large datasets
-        # Individual objects are created on-demand by rna_instance command
+        if structure_name:
+            # Step 1: Show full structure in gray80
+            try:
+                # Enable and show the main structure
+                self.cmd.enable(structure_name)
+                self.cmd.show('cartoon', structure_name)
+                self.cmd.color('gray80', structure_name)
+                self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
+                self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
+            except Exception as e:
+                self.logger.debug(f"Could not set structure display: {e}")
+        
+        # Step 2: Handle motif objects - show only the selected one
+        for mt, mt_info in loaded_motifs.items():
+            obj_name = mt_info.get('object_name')
+            if obj_name:
+                if mt == motif_type:
+                    # Show and highlight this motif type
+                    self.cmd.enable(obj_name)
+                    self.cmd.show('cartoon', obj_name)
+                    colors.set_motif_color_in_pymol(self.cmd, obj_name, mt)
+                else:
+                    # Hide other motif objects
+                    self.cmd.disable(obj_name)
+        
+        # Step 3: Hide any previously created instance objects
+        for obj in self.cmd.get_object_list():
+            # Match patterns like GNRA_1, HL_23, etc.
+            for mt in loaded_motifs.keys():
+                if obj.startswith(f"{mt}_") and obj[len(mt)+1:].isdigit():
+                    self.cmd.disable(obj)
         
         # Print instance table
         self._print_motif_instance_table(motif_type, motif_details)
@@ -974,14 +997,33 @@ class VisualizationManager:
         print("=" * 50 + "\n")
     
     def show_all_motifs(self) -> None:
-        """Show all loaded motifs (reset to default view)."""
+        """Show all loaded motifs with full structure visible (reset to default view)."""
         loaded_motifs = self.motif_loader.get_loaded_motifs()
         
+        # Get structure name and show full structure in gray80
+        structure_name = None
+        for info in loaded_motifs.values():
+            if info.get('structure_name'):
+                structure_name = info.get('structure_name')
+                break
+        
+        if structure_name:
+            try:
+                self.cmd.enable(structure_name)
+                self.cmd.show('cartoon', structure_name)
+                self.cmd.color('gray80', structure_name)
+                self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
+                self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
+            except Exception as e:
+                self.logger.debug(f"Could not set structure display: {e}")
+        
+        # Show all motif type objects with their colors
         for motif_type, info in loaded_motifs.items():
             obj_name = info.get('object_name')
             if obj_name:
                 self.cmd.enable(obj_name)
                 self.cmd.show('cartoon', obj_name)
+                colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type)
             
             # Disable individual instance objects
             motif_details = info.get('motif_details', [])
