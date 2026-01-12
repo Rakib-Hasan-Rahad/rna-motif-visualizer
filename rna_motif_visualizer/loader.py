@@ -674,10 +674,9 @@ class VisualizationManager:
         # Get motif details
         info = loaded_motifs[motif_type]
         motif_details = info.get('motif_details', [])
-        structure_name = info.get('structure_name')
         
-        # Create individual objects for each instance
-        self._create_instance_objects(motif_type, motif_details, structure_name)
+        # NOTE: We do NOT create individual objects here to avoid crashes with large datasets
+        # Individual objects are created on-demand by rna_instance command
         
         # Print instance table
         self._print_motif_instance_table(motif_type, motif_details)
@@ -748,6 +747,64 @@ class VisualizationManager:
             except Exception as e:
                 self.logger.debug(f"Could not create object {obj_name}: {e}")
     
+    def _create_single_instance_object(self, motif_type: str, instance_no: int,
+                                         detail: Dict, structure_name: str) -> bool:
+        """
+        Create a single PyMOL object for one motif instance (on-demand).
+        
+        Args:
+            motif_type: Motif type (e.g., 'HL', 'GNRA')
+            instance_no: 1-indexed instance number
+            detail: Single motif instance detail dict
+            structure_name: Name of the structure in PyMOL
+            
+        Returns:
+            True if successful
+        """
+        from .utils.parser import SelectionParser
+        
+        residues = detail.get('residues', [])
+        
+        if not residues:
+            return False
+        
+        # Build selection for this instance
+        chain_residues = {}
+        for res in residues:
+            if isinstance(res, tuple) and len(res) >= 3:
+                nucleotide, resi, chain = res[0], res[1], res[2]
+                if chain not in chain_residues:
+                    chain_residues[chain] = []
+                chain_residues[chain].append(resi)
+        
+        # Create selection
+        selections = []
+        for chain, resi_list in chain_residues.items():
+            sel = SelectionParser.create_selection_string(chain, sorted(resi_list))
+            if sel:
+                selections.append(f"({sel})")
+        
+        if not selections:
+            return False
+        
+        combined_sel = " or ".join(selections)
+        instance_sel = f"({structure_name}) and ({combined_sel})"
+        
+        # Create object name: MOTIF_NO (e.g., GNRA_1, GNRA_2)
+        obj_name = f"{motif_type}_{instance_no}"
+        
+        # Create the object
+        try:
+            self.cmd.create(obj_name, instance_sel)
+            self.cmd.show('cartoon', obj_name)
+            self.cmd.set('cartoon_nucleic_acid_mode', 4, obj_name)
+            self.cmd.set('cartoon_tube_radius', 0.4, obj_name)
+            colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type)
+            return True
+        except Exception as e:
+            self.logger.debug(f"Could not create object {obj_name}: {e}")
+            return False
+
     def _print_motif_instance_table(self, motif_type: str, motif_details: List[Dict]) -> None:
         """
         Print detailed instance table for a motif type.
@@ -817,6 +874,7 @@ class VisualizationManager:
     def show_motif_instance(self, motif_type: str, instance_no: int) -> bool:
         """
         Show only a specific instance of a motif type.
+        Creates the instance object on-demand to avoid memory issues.
         
         Args:
             motif_type: Motif type (e.g., 'GNRA')
@@ -834,6 +892,7 @@ class VisualizationManager:
         
         info = loaded_motifs[motif_type]
         motif_details = info.get('motif_details', [])
+        structure_name = info.get('structure_name')
         
         if instance_no < 1 or instance_no > len(motif_details):
             self.logger.error(f"Instance {instance_no} not found. Valid range: 1-{len(motif_details)}")
@@ -845,16 +904,23 @@ class VisualizationManager:
             if obj_name:
                 self.cmd.disable(obj_name)
         
-        # Hide all instance objects for this motif type
-        for i in range(1, len(motif_details) + 1):
-            obj_name = f"{motif_type}_{i}"
-            try:
-                self.cmd.disable(obj_name)
-            except:
-                pass
+        # Hide any previously created instance objects for this motif type
+        # (only the ones that were created, not all possible)
+        for obj in self.cmd.get_object_list():
+            if obj.startswith(f"{motif_type}_") and obj[len(motif_type)+1:].isdigit():
+                self.cmd.disable(obj)
         
-        # Show only the requested instance
+        # Create or show the requested instance object on-demand
         instance_obj = f"{motif_type}_{instance_no}"
+        detail = motif_details[instance_no - 1]
+        
+        # Check if object already exists
+        existing_objects = self.cmd.get_object_list()
+        if instance_obj not in existing_objects:
+            # Create the object on-demand
+            self._create_single_instance_object(motif_type, instance_no, detail, structure_name)
+        
+        # Show the instance
         try:
             self.cmd.enable(instance_obj)
             self.cmd.show('cartoon', instance_obj)
@@ -864,7 +930,6 @@ class VisualizationManager:
             return False
         
         # Print instance details
-        detail = motif_details[instance_no - 1]
         self._print_single_instance_info(motif_type, instance_no, detail)
         
         # Print follow-up suggestions
