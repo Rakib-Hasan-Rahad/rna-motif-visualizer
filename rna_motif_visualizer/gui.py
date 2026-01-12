@@ -368,8 +368,10 @@ class MotifVisualizerGUI:
 │  LOADING & SOURCES                                                   │
 ├──────────────────────────────────────────────────────────────────────┤
 │  rna_load <PDB_ID>           Load structure and visualize motifs     │
-│  rna_source <MODE>           Set data source (auto/local/bgsu/rfam)  │
-│  rna_sources                 Show available sources and details      │
+│  rna_source                  Show current source mode & config       │
+│  rna_source <MODE>           Set source (auto/local/bgsu/rfam/all)   │
+│  rna_sources                 Show all available sources (detailed)   │
+│  rna_switch <DB>             Switch database (atlas/rfam)            │
 │  rna_refresh [PDB_ID]        Force refresh from API (bypass cache)   │
 ├──────────────────────────────────────────────────────────────────────┤
 │  VISUALIZATION                                                       │
@@ -393,7 +395,7 @@ class MotifVisualizerGUI:
     rna_load 1S72                # Load ribosome structure
     rna_show HL                  # Highlight hairpin loops
     rna_instance HL 5            # View instance #5 in detail
-    rna_all                      # Reset to show all motifs
+    rna_source                   # Check current source mode
 """)
         print("="*70 + "\n")
     
@@ -586,8 +588,9 @@ class MotifVisualizerGUI:
         print("  rna_source bgsu   - Use BGSU API (3000+ PDBs)")
         print("  rna_source rfam   - Use Rfam API")
         print("  rna_source all    - Combine all sources")
+        print("  rna_switch <DB>   - Switch database (atlas/rfam)")
         print("  rna_refresh       - Force refresh from API")
-        print("  rna_source_info   - Show this information")
+        print("  rna_source        - Show this information again")
         print("="*60 + "\n")
 
 
