@@ -258,27 +258,144 @@ class MotifVisualizerGUI:
         
         print("="*60 + "\n")
     
-    def print_databases(self):
-        """Print available databases to console."""
-        print("\n" + "="*60)
-        print("AVAILABLE MOTIF DATABASES")
-        print("="*60)
+    def print_sources(self):
+        """Print comprehensive source information - LOCAL and ONLINE separately."""
+        print("\n" + "="*70)
+        print("  RNA MOTIF DATA SOURCES")
+        print("="*70)
         
-        databases = self.list_databases()
-        for db in databases:
-            active_marker = " [ACTIVE]" if db.get('active') else ""
-            print(f"\n{db['id']}{active_marker}")
-            print(f"  Name: {db['name']}")
-            print(f"  Description: {db['description']}")
-            print(f"  Motif types: {db['motif_types']}")
-            print(f"  PDB structures: {db['pdb_count']}")
+        try:
+            from .database import get_config, get_source_selector, SourceMode
+            from .database.cache_manager import get_cache_manager
+            
+            config = get_config()
+            
+            # Current mode
+            print(f"\n  Current Mode: {config.source_mode.value.upper()}")
+            
+            # LOCAL Sources
+            print("\n" + "-"*70)
+            print("  LOCAL SOURCES (Offline - Bundled with Plugin)")
+            print("-"*70)
+            
+            source_selector = get_source_selector()
+            if source_selector:
+                local_sources = [(sid, p) for sid, p in source_selector.providers.items() 
+                                if 'api' not in sid.lower()]
+                for source_id, provider in local_sources:
+                    print(f"\n  • {provider.info.name}")
+                    print(f"    ID: {source_id}")
+                    if hasattr(provider.info, 'description'):
+                        print(f"    Description: {provider.info.description}")
+                    # Get PDB count if available
+                    pdbs = provider.get_supported_pdbs() if hasattr(provider, 'get_supported_pdbs') else []
+                    if pdbs:
+                        print(f"    Structures: {len(pdbs)} PDBs")
+                    motif_types = provider.info.motif_types if hasattr(provider.info, 'motif_types') else []
+                    if motif_types:
+                        print(f"    Motif Types: {', '.join(motif_types)}")
+                
+                if not local_sources:
+                    print("    No local sources available")
+            
+            # ONLINE Sources
+            print("\n" + "-"*70)
+            print("  ONLINE SOURCES (Require Internet)")
+            print("-"*70)
+            
+            if source_selector:
+                online_sources = [(sid, p) for sid, p in source_selector.providers.items() 
+                                 if 'api' in sid.lower()]
+                for source_id, provider in online_sources:
+                    print(f"\n  • {provider.info.name}")
+                    print(f"    ID: {source_id}")
+                    if hasattr(provider.info, 'description'):
+                        print(f"    Description: {provider.info.description}")
+                    if 'bgsu' in source_id.lower():
+                        print(f"    Coverage: ~3000+ RNA structures")
+                    elif 'rfam' in source_id.lower():
+                        print(f"    Coverage: Named RNA motif families")
+                
+                if not online_sources:
+                    print("    No online sources available")
+            
+            # Cache info
+            print("\n" + "-"*70)
+            print("  CACHE STATUS")
+            print("-"*70)
+            cache_manager = get_cache_manager()
+            if cache_manager and cache_manager.cache_dir.exists():
+                cached_files = [f for f in cache_manager.cache_dir.glob("*.json") 
+                               if not f.name.endswith('.meta.json')]
+                print(f"  Directory: {cache_manager.cache_dir}")
+                print(f"  Cached Entries: {len(cached_files)}")
+                print(f"  Expiry: {config.freshness_policy.cache_days} days")
+            else:
+                print("  Cache not initialized")
+            
+        except ImportError:
+            print("  Source system not initialized")
         
-        print("\n" + "="*60)
-        print("To use a specific database:")
-        print("  rna_load <PDB_ID>, database=atlas")
-        print("  rna_load <PDB_ID>, database=rfam")
-        print("  rna_switch <database_id>")
-        print("="*60 + "\n")
+        # How to use
+        print("\n" + "="*70)
+        print("  HOW TO USE")
+        print("="*70)
+        print("""
+  Set Source Mode:
+    rna_source local     Use only local bundled databases (offline)
+    rna_source bgsu      Use BGSU RNA 3D Hub API (3000+ structures)
+    rna_source rfam      Use Rfam API (named motif families)
+    rna_source auto      Auto-select (local first, then API) [DEFAULT]
+    rna_source all       Combine all sources
+
+  Load Structure:
+    rna_load 1S72        Load using current source mode
+    rna_load 4V9F        Load another structure
+
+  Force Refresh:
+    rna_refresh          Bypass cache, fetch fresh from API
+""")
+        print("="*70 + "\n")
+    
+    def print_help(self):
+        """Print all available commands categorically."""
+        print("\n" + "="*70)
+        print("  RNA MOTIF VISUALIZER - COMMAND REFERENCE")
+        print("="*70)
+        
+        print("""
+┌──────────────────────────────────────────────────────────────────────┐
+│  LOADING & SOURCES                                                   │
+├──────────────────────────────────────────────────────────────────────┤
+│  rna_load <PDB_ID>           Load structure and visualize motifs     │
+│  rna_source <MODE>           Set data source (auto/local/bgsu/rfam)  │
+│  rna_sources                 Show available sources and details      │
+│  rna_refresh [PDB_ID]        Force refresh from API (bypass cache)   │
+├──────────────────────────────────────────────────────────────────────┤
+│  VISUALIZATION                                                       │
+├──────────────────────────────────────────────────────────────────────┤
+│  rna_all                     Show all motifs (reset view)            │
+│  rna_show <MOTIF_TYPE>       Highlight specific motif type           │
+│  rna_instance <TYPE> <NO>    View single instance (zoom + details)   │
+│  rna_toggle <TYPE> <on|off>  Toggle motif visibility                 │
+│  rna_bg_color <COLOR>        Change background color (e.g., gray80)  │
+│  rna_colors                  Show color legend for motif types       │
+├──────────────────────────────────────────────────────────────────────┤
+│  INFORMATION                                                         │
+├──────────────────────────────────────────────────────────────────────┤
+│  rna_summary                 Show motif types and instance counts    │
+│  rna_status                  Show current plugin status              │
+│  rna_help                    Show this command reference             │
+└──────────────────────────────────────────────────────────────────────┘
+
+  EXAMPLES:
+    rna_source bgsu              # Use BGSU API
+    rna_load 1S72                # Load ribosome structure
+    rna_show HL                  # Highlight hairpin loops
+    rna_instance HL 5            # View instance #5 in detail
+    rna_all                      # Reset to show all motifs
+""")
+        print("="*70 + "\n")
     
     def print_motif_summary(self):
         """Print detailed motif summary table to console."""
@@ -518,7 +635,7 @@ def initialize_gui():
             rna_switch rfam
         """
         if not database_id:
-            gui.print_databases()
+            gui.print_sources()
             return
         
         gui.switch_database_action(str(database_id).strip())
@@ -554,9 +671,13 @@ def initialize_gui():
         """PyMOL command: Show plugin status."""
         gui.print_status()
     
-    def list_databases():
-        """PyMOL command: List available databases."""
-        gui.print_databases()
+    def list_sources():
+        """PyMOL command: Show available data sources."""
+        gui.print_sources()
+    
+    def show_help():
+        """PyMOL command: Show all available commands."""
+        gui.print_help()
     
     def set_bg_color(color_name='gray80'):
         """PyMOL command: Change background color of non-motif residues."""
@@ -594,10 +715,6 @@ def initialize_gui():
         """
         pdb_arg = str(pdb_id).strip() if pdb_id else None
         gui.refresh_motifs_action(pdb_arg)
-    
-    def source_info():
-        """PyMOL command: Show source configuration and cache status."""
-        gui.print_source_info()
     
     def show_motif(motif_type=''):
         """PyMOL command: Show specific motif type, hide others, print instance table.
@@ -657,12 +774,12 @@ def initialize_gui():
     cmd.extend('rna_switch', switch_database)
     cmd.extend('rna_toggle', toggle_motif)
     cmd.extend('rna_status', motif_status)
-    cmd.extend('rna_databases', list_databases)
+    cmd.extend('rna_sources', list_sources)
+    cmd.extend('rna_help', show_help)
     cmd.extend('rna_bg_color', set_bg_color)
     cmd.extend('rna_summary', motif_summary)
     cmd.extend('rna_source', set_source)
     cmd.extend('rna_refresh', refresh_motifs)
-    cmd.extend('rna_source_info', source_info)
     cmd.extend('rna_show', show_motif)
     cmd.extend('rna_instance', show_instance)
     cmd.extend('rna_all', show_all)
@@ -679,28 +796,13 @@ def initialize_gui():
     cmd.extend('rna_colors', show_colors)
     
     gui.logger.success("RNA Motif Visualizer GUI initialized")
-    gui.logger.info("Available commands:")
-    gui.logger.info("  rna_load <PDB_ID> [, database=atlas|rfam] [, bg_color=gray80]")
-    gui.logger.info("    - Load structure and visualize motifs")
-    gui.logger.info("  rna_show <MOTIF_TYPE>")
-    gui.logger.info("    - Show specific motif type, hide others, list instances")
-    gui.logger.info("  rna_instance <MOTIF_TYPE> <NO>")
-    gui.logger.info("    - Show specific instance (e.g., rna_instance GNRA 1)")
-    gui.logger.info("  rna_all")
-    gui.logger.info("    - Show all motifs (reset view)")
-    gui.logger.info("  rna_toggle <MOTIF_TYPE> <on|off>")
-    gui.logger.info("    - Toggle motif visibility")
-    gui.logger.info("  rna_summary - Show motif types and counts")
-    gui.logger.info("  rna_status - Show current status")
     gui.logger.info("")
-    gui.logger.info("Data source commands:")
-    gui.logger.info("  rna_source <auto|local|bgsu|rfam|all>")
-    gui.logger.info("  rna_refresh [PDB_ID] - Force refresh from API")
-    gui.logger.info("  rna_source_info - Show source config")
+    gui.logger.info("Quick Start:")
+    gui.logger.info("  rna_source bgsu         Set source to BGSU API (3000+ structures)")
+    gui.logger.info("  rna_load 1S72           Load and visualize motifs")
+    gui.logger.info("  rna_show HL             Highlight hairpin loops")
+    gui.logger.info("  rna_instance HL 1       View specific instance")
     gui.logger.info("")
-    gui.logger.info("  rna_colors - Show color legend")
+    gui.logger.info("  rna_help                Show all commands")
+    gui.logger.info("  rna_sources             Show available data sources")
     gui.logger.info("")
-    gui.logger.info("Examples:")
-    gui.logger.info("  rna_load 1S72, database=rfam")
-    gui.logger.info("  rna_show GNRA")
-    gui.logger.info("  rna_instance GNRA 3")
