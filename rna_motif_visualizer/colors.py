@@ -242,23 +242,6 @@ def get_color(motif_type):
         if isinstance(custom, tuple):
             return custom
     return MOTIF_COLORS.get(normalized, DEFAULT_COLOR)
-    # RNA 3D Atlas
-    'HL': {'color': 'red', 'description': 'Hairpin loops (Atlas)'},
-    'IL': {'color': 'cyan', 'description': 'Internal loops (Atlas)'},
-    'J3': {'color': 'yellow', 'description': '3-way junctions (Atlas)'},
-    'J4': {'color': 'magenta', 'description': '4-way junctions (Atlas)'},
-    'J5': {'color': 'green', 'description': '5-way junctions (Atlas)'},
-    'J6': {'color': 'orange', 'description': '6-way junctions (Atlas)'},
-    'J7': {'color': 'blue', 'description': '7-way junctions (Atlas)'},
-    # Rfam
-    'GNRA': {'color': 'teal', 'description': 'GNRA tetraloop (Rfam)'},
-    'T_LOOP': {'color': 'pink', 'description': 'T-loop motif (Rfam)'},
-    'C_LOOP': {'color': 'sky blue', 'description': 'C-loop motif (Rfam)'},
-    'K_TURN_1': {'color': 'marine', 'description': 'K-turn variant 1 (Rfam)'},
-    'K_TURN_2': {'color': 'blue', 'description': 'K-turn variant 2 (Rfam)'},
-    'SARCIN_RICIN_1': {'color': 'firebrick', 'description': 'Sarcin-ricin loop (Rfam)'},
-    'UNCG': {'color': 'brown', 'description': 'UNCG tetraloop (Rfam)'},
-}
 
 
 def set_background_color(color_name):
