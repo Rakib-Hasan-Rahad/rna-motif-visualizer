@@ -994,8 +994,9 @@ class VisualizationManager:
                 self.cmd.set('cartoon_tube_radius', 0.4, instance_obj)
                 colors.set_motif_color_in_pymol(self.cmd, instance_obj, motif_type)
                 
-                # Hide the residues from the main structure to avoid overlap
-                self.cmd.hide('cartoon', instance_sel)
+                # NOTE: We do NOT hide residues from main structure
+                # Hiding them breaks the visual backbone connection
+                # The colored instance object renders on top of the gray structure
                 
                 # Zoom to the instance
                 self.cmd.zoom(instance_obj, 5)
