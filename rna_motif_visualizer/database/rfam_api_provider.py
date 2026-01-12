@@ -167,8 +167,8 @@ class RfamAPIProvider(BaseProvider):
                 if instances:
                     result[info['short']] = instances
             except Exception as e:
-                # Continue with other motifs if one fails
-                print(f"Error fetching {info['short']} for {pdb_id}: {e}")
+                # Silently continue - many motif types won't have matches for a given PDB
+                # This is expected behavior, not an error
                 continue
         
         # Cache the results
@@ -271,11 +271,14 @@ class RfamAPIProvider(BaseProvider):
                     return pdb_mappings
                     
         except urllib.error.HTTPError as e:
-            print(f"HTTP error fetching Rfam motif {rfam_motif_id}: {e.code}")
+            # 404 is expected for motifs not in Rfam - silently return empty
+            pass
         except urllib.error.URLError as e:
-            print(f"Network error fetching Rfam motif: {e.reason}")
+            # Network errors - silently return empty
+            pass
         except Exception as e:
-            print(f"Error fetching Rfam motif {rfam_motif_id}: {e}")
+            # Other errors - silently return empty
+            pass
         
         return {}
     

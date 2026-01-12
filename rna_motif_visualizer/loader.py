@@ -579,13 +579,32 @@ class VisualizationManager:
             motifs: Dictionary of loaded motifs
             provider_id: Database provider used
         """
-        # Get database name
-        registry = self.motif_loader.get_registry()
-        if provider_id:
-            provider = registry.get_provider(provider_id)
+        # Get database name from the last source used
+        last_source = self.motif_loader.get_last_source_used()
+        
+        # Map source IDs to friendly names
+        source_names = {
+            'atlas': 'RNA 3D Motif Atlas (Local)',
+            'rfam': 'Rfam (Local)',
+            'bgsu_api': 'BGSU RNA 3D Hub (API)',
+            'rfam_api': 'Rfam (API)',
+        }
+        
+        if last_source:
+            # Handle comma-separated sources (from 'all' mode)
+            if ',' in last_source:
+                sources = [source_names.get(s.strip(), s.strip()) for s in last_source.split(',')]
+                db_name = ' + '.join(sources)
+            else:
+                db_name = source_names.get(last_source, last_source)
         else:
-            provider = registry.get_active_provider()
-        db_name = provider.info.name if provider else "Unknown"
+            # Fallback to registry
+            registry = self.motif_loader.get_registry()
+            if provider_id:
+                provider = registry.get_provider(provider_id)
+            else:
+                provider = registry.get_active_provider()
+            db_name = provider.info.name if provider else "Unknown"
         
         # Build the table
         print("\n" + "=" * 50)
