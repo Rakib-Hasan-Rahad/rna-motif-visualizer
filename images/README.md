@@ -1,63 +1,67 @@
 # Documentation Images
 
-This folder contains screenshots for the RNA Motif Visualizer documentation.
+Screenshots for RNA Motif Visualizer v2.1.0 documentation.
 
 ## Current Images
 - `1.png`, `2.png`, `3.png` - Existing screenshots
 
+---
+
 ## Required Images for README.md
 
-Add the following screenshots to complete the documentation:
+| Filename | Description | How to Create |
+|----------|-------------|---------------|
+| `banner.png` | Main plugin banner | Load structure, show motifs, screenshot |
+| `installation_steps.png` | Plugin Manager settings | Plugin → Plugin Manager → Settings tab |
 
-| Filename | Description | Used In |
-|----------|-------------|---------|
-| `banner.png` | Main plugin banner showing the plugin in action | README header |
-| `installation_steps.png` | Plugin Manager settings tab screenshot | Installation section |
-| `installation_success.png` | Welcome message in PyMOL console | Installation verification |
-| `quickstart_demo.png` | Loaded structure with colored motifs | Quick Start section |
-| `console_suggestions.png` | Console output showing "Next steps" suggestions | Quick Start section |
-| `data_sources.png` | Diagram showing data flow from different sources | Data Sources section |
-| `color_legend.png` | Visual color legend showing all motif colors | Display section |
-| `object_panel.png` | PyMOL object panel with motif objects | Display section |
-| `instance_table.png` | Console output of instance table | Instance Explorer section |
-| `instance_view.png` | Zoomed view of a single motif instance | Instance Explorer section |
+---
 
 ## Required Images for TUTORIAL.md
 
-| Filename | Description | Used In |
-|----------|-------------|---------|
-| `tutorial_welcome.png` | Welcome message after plugin loads | Getting Started |
-| `tutorial_loaded.png` | Structure after `rna_load` command | Loading section |
-| `tutorial_gnra.png` | GNRA motifs highlighted | Exploring Motifs |
-| `tutorial_instance.png` | Single instance zoomed view | Instance Details |
+| Filename | Description | Commands to Run |
+|----------|-------------|-----------------|
+| `rna_help.png` | Command reference | `rna_help` |
+| `rna_sources.png` | Data sources view | `rna_sources` |
+| `rna_load.png` | Loaded structure | `rna_load 1S72` |
+| `rna_show.png` | Highlighted motifs | `rna_show HL` |
+| `rna_instance.png` | Single instance | `rna_instance HL 1` |
+| `rna_color.png` | Custom colors | `rna_color HL blue` |
+
+---
 
 ## How to Create Screenshots
 
-1. **In PyMOL**, run the commands shown in the tutorial
-2. **Position the view** as desired
-3. **Take screenshot** using:
-   - macOS: `Cmd + Shift + 4` (select area)
-   - Or in PyMOL: `png filename.png, dpi=150`
-4. **Save to this folder** with the correct filename
+### Console Screenshots
+1. Run the command in PyMOL
+2. Select the console output text
+3. Screenshot with `Cmd + Shift + 4` (macOS)
 
-## Recommended Settings for Screenshots
-
+### Structure Screenshots
 ```python
-# White background for clarity
+# Setup
 bg_color white
-
-# High quality rendering
 set ray_shadows, 0
-set antialias, 2
 
-# Save high-res image
-ray 1200, 900
-png my_screenshot.png
+# Load and visualize
+rna_load 1S72
+rna_show HL
+
+# High quality screenshot
+ray 1200, 1200
+png screenshot.png
 ```
 
-## Tips
+### PyMOL Screenshot Command
+```python
+png filename.png, dpi=150
+```
 
-- Use **white background** for better visibility in documentation
-- Crop images to focus on relevant areas
-- Keep file sizes reasonable (< 500KB each)
-- Use PNG format for screenshots
+---
+
+## Image Dimensions
+
+| Type | Recommended Size |
+|------|------------------|
+| Banner | 1200 x 400 px |
+| Console | 800 x 600 px |
+| Structure | 1200 x 1200 px |
