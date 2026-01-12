@@ -224,3 +224,59 @@ def register_all_colors(cmd):
             cmd.set_color(color_name, color_rgb)
         except:
             pass
+
+
+def print_color_legend(loaded_motifs=None):
+    """
+    Print a color legend to the console.
+    
+    Args:
+        loaded_motifs: Optional dict of currently loaded motifs to show only relevant colors
+    """
+    print("\n" + "=" * 60)
+    print("  RNA MOTIF COLOR LEGEND")
+    print("=" * 60)
+    
+    if loaded_motifs:
+        # Show only colors for loaded motifs
+        print("  Currently loaded motifs:")
+        print("-" * 60)
+        print(f"  {'MOTIF TYPE':<15} {'COLOR':<15} {'RGB'}")
+        print("-" * 60)
+        
+        for motif_type in sorted(loaded_motifs.keys()):
+            color = get_color(motif_type)
+            r, g, b = int(color[0]*255), int(color[1]*255), int(color[2]*255)
+            color_name = PYMOL_COLOR_NAMES.get(motif_type.upper().replace('-', '_'), 'custom')
+            print(f"  {motif_type:<15} {color_name:<15} ({r}, {g}, {b})")
+    else:
+        # Show all available colors
+        print("\n  RNA 3D Atlas Motifs (HL, IL, Junctions):")
+        print("-" * 60)
+        print(f"  {'MOTIF':<12} {'COLOR':<12} {'RGB':<18} {'DESCRIPTION'}")
+        print("-" * 60)
+        
+        atlas_motifs = ['HL', 'IL', 'J3', 'J4', 'J5', 'J6', 'J7']
+        for mt in atlas_motifs:
+            color = MOTIF_COLORS.get(mt, DEFAULT_COLOR)
+            r, g, b = int(color[0]*255), int(color[1]*255), int(color[2]*255)
+            desc = MOTIF_LEGEND.get(mt, {}).get('description', '')
+            color_name = PYMOL_COLOR_NAMES.get(mt, 'custom')
+            print(f"  {mt:<12} {color_name:<12} ({r:>3}, {g:>3}, {b:>3})  {desc}")
+        
+        print("\n  Rfam Named Motifs (Tetraloops, K-turns, etc.):")
+        print("-" * 60)
+        
+        rfam_motifs = ['GNRA', 'UNCG', 'T_LOOP', 'C_LOOP', 'K_TURN_1', 'K_TURN_2', 'SARCIN_RICIN_1', 'U_TURN']
+        for mt in rfam_motifs:
+            if mt in MOTIF_COLORS:
+                color = MOTIF_COLORS[mt]
+                r, g, b = int(color[0]*255), int(color[1]*255), int(color[2]*255)
+                desc = MOTIF_LEGEND.get(mt, {}).get('description', '')
+                color_name = PYMOL_COLOR_NAMES.get(mt, 'custom')
+                display_name = mt.replace('_', '-')
+                print(f"  {display_name:<12} {color_name:<12} ({r:>3}, {g:>3}, {b:>3})  {desc}")
+    
+    print("\n" + "-" * 60)
+    print("  Background (non-motif residues): " + get_background_color())
+    print("=" * 60 + "\n")

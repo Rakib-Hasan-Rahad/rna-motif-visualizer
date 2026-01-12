@@ -130,6 +130,7 @@ After each command, look at the console for **"Next steps"** suggestions:
 | `rna_status` | Show current status | `rna_status` |
 | `rna_databases` | List available databases | `rna_databases` |
 | `rna_bg_color <COLOR>` | Change background color | `rna_bg_color white` |
+| `rna_colors` | Show color legend | `rna_colors` |
 
 ---
 

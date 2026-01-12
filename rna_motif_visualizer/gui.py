@@ -667,6 +667,17 @@ def initialize_gui():
     cmd.extend('rna_instance', show_instance)
     cmd.extend('rna_all', show_all)
     
+    def show_colors():
+        """PyMOL command: Show color legend for all motif types."""
+        from . import colors as color_module
+        loaded = gui.viz_manager.motif_loader.get_loaded_motifs()
+        if loaded:
+            color_module.print_color_legend(loaded)
+        else:
+            color_module.print_color_legend()
+    
+    cmd.extend('rna_colors', show_colors)
+    
     gui.logger.success("RNA Motif Visualizer GUI initialized")
     gui.logger.info("Available commands:")
     gui.logger.info("  rna_load <PDB_ID> [, database=atlas|rfam] [, bg_color=gray80]")
@@ -686,6 +697,8 @@ def initialize_gui():
     gui.logger.info("  rna_source <auto|local|bgsu|rfam|all>")
     gui.logger.info("  rna_refresh [PDB_ID] - Force refresh from API")
     gui.logger.info("  rna_source_info - Show source config")
+    gui.logger.info("")
+    gui.logger.info("  rna_colors - Show color legend")
     gui.logger.info("")
     gui.logger.info("Examples:")
     gui.logger.info("  rna_load 1S72, database=rfam")
