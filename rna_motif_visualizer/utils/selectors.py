@@ -55,19 +55,19 @@ class MotifSelector:
             self.logger.error(f"Failed to create motif object: {e}")
             return None
     
-    def create_motif_class_object(self, structure_name, motif_type, motif_list):
+    def create_motif_class_object(self, structure_name, motif_type, motif_details):
         """
         Create a combined PyMOL object for all motifs of a type.
         
         Args:
             structure_name (str): Name of the loaded structure
             motif_type (str): Type of motif (e.g., 'KTURN')
-            motif_list (list): List of motif dictionaries with keys: chain, residues, motif_id
+            motif_details (list): List of motif detail dicts with keys: motif_id, residues (list of tuples)
         
         Returns:
             str: Name of created PyMOL object (e.g., 'KTURN_ALL')
         """
-        if not motif_list:
+        if not motif_details:
             return None
         
         try:
@@ -75,17 +75,29 @@ class MotifSelector:
             
             # Collect all selection strings
             selections = []
-            for motif in motif_list:
-                if not validate_motif_data(motif):
-                    self.logger.warning(f"Skipping invalid motif: {motif}")
+            for detail in motif_details:
+                if not detail.get('residues'):
                     continue
                 
-                chain = motif.get('chain')
-                residues = motif.get('residues')
+                # residues is a list of tuples: [('G', 1054, '0'), ('C', 1055, '0'), ...]
+                # Extract chain_id and residue_numbers from tuples
+                residue_tuples = detail.get('residues', [])
+                if not residue_tuples:
+                    continue
                 
-                selection = SelectionParser.create_selection_string(chain, residues)
-                if selection:
-                    selections.append(selection)
+                chain_residues = {}
+                for res_tuple in residue_tuples:
+                    if isinstance(res_tuple, tuple) and len(res_tuple) >= 3:
+                        nucleotide, resi, chain = res_tuple[0], res_tuple[1], res_tuple[2]
+                        if chain not in chain_residues:
+                            chain_residues[chain] = []
+                        chain_residues[chain].append(resi)
+                
+                # Create selections for each chain
+                for chain, residues in chain_residues.items():
+                    selection = SelectionParser.create_selection_string(chain, residues)
+                    if selection:
+                        selections.append(selection)
             
             if not selections:
                 self.logger.warning(f"No valid selections found for {motif_type}")
@@ -104,7 +116,7 @@ class MotifSelector:
             self.logger.error(f"Failed to create motif class object {motif_type}: {e}")
             return None
     
-    def color_motif_residues(self, structure_name, motif_type, motif_list, color_rgb):
+    def color_motif_residues(self, structure_name, motif_type, motif_details, color_rgb):
         """
         Color residues directly on the structure without creating overlapping objects.
         This avoids z-fighting/striping artifacts.
@@ -112,13 +124,13 @@ class MotifSelector:
         Args:
             structure_name (str): Name of the loaded structure
             motif_type (str): Type of motif (e.g., 'KTURN')
-            motif_list (list): List of motif dictionaries with keys: chain, residues
+            motif_details (list): List of motif detail dicts with keys: residues (list of tuples)
             color_rgb (tuple): RGB color tuple (0-1 range)
         
         Returns:
             str: Selection name for the colored residues
         """
-        if not motif_list:
+        if not motif_details:
             return None
         
         try:
@@ -126,16 +138,25 @@ class MotifSelector:
             
             # Collect all selection strings
             selections = []
-            for motif in motif_list:
-                if not validate_motif_data(motif):
+            for detail in motif_details:
+                residue_tuples = detail.get('residues', [])
+                if not residue_tuples:
                     continue
                 
-                chain = motif.get('chain')
-                residues = motif.get('residues')
+                # Extract chain_id and residue_numbers from tuples
+                chain_residues = {}
+                for res_tuple in residue_tuples:
+                    if isinstance(res_tuple, tuple) and len(res_tuple) >= 3:
+                        nucleotide, resi, chain = res_tuple[0], res_tuple[1], res_tuple[2]
+                        if chain not in chain_residues:
+                            chain_residues[chain] = []
+                        chain_residues[chain].append(resi)
                 
-                selection = SelectionParser.create_selection_string(chain, residues)
-                if selection:
-                    selections.append(selection)
+                # Create selections for each chain
+                for chain, residues in chain_residues.items():
+                    selection = SelectionParser.create_selection_string(chain, residues)
+                    if selection:
+                        selections.append(selection)
             
             if not selections:
                 return None

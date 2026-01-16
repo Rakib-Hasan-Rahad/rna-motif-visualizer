@@ -122,25 +122,6 @@ class MotifInstance:
         if chain:
             return sorted(r.residue_number for r in self.residues if r.chain == chain)
         return sorted(r.residue_number for r in self.residues)
-    
-    def to_legacy_format(self) -> List[Dict]:
-        """
-        Convert to legacy format expected by MotifSelector.
-        
-        Returns list of dicts: [{motif_id, chain, residues}, ...]
-        """
-        by_chain: Dict[str, List[int]] = {}
-        for r in self.residues:
-            by_chain.setdefault(r.chain, []).append(r.residue_number)
-        
-        result = []
-        for chain, res_nums in by_chain.items():
-            result.append({
-                'motif_id': str(self.motif_id),
-                'chain': str(chain),
-                'residues': sorted(set(res_nums)),
-            })
-        return result
 
 
 @dataclass

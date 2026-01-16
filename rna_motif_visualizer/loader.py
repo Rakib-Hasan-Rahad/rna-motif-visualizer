@@ -219,17 +219,12 @@ class UnifiedMotifLoader:
         if not instances:
             return
         
-        # Build motif_list in format MotifSelector expects
-        motif_list: List[Dict] = []
+        # Build motif_details in unified format (single source of truth)
         motif_details = []
         
         for instance in instances:
             if not instance.residues:
                 continue
-            
-            # Convert to legacy format for selector
-            legacy_entries = instance.to_legacy_format()
-            motif_list.extend(legacy_entries)
             
             motif_details.append({
                 'motif_id': instance.motif_id,
@@ -238,7 +233,7 @@ class UnifiedMotifLoader:
                 'annotation': instance.annotation,
             })
         
-        if not motif_list:
+        if not motif_details:
             self.logger.debug(f"No residues found for {motif_type} motifs in {pdb_id}")
             return
         
@@ -249,12 +244,21 @@ class UnifiedMotifLoader:
         # Build combined selection for all residues of this motif type
         from .utils.parser import SelectionParser
         all_selections = []
-        for motif in motif_list:
-            chain = motif.get('chain')
-            residues = motif.get('residues')
-            sel = SelectionParser.create_selection_string(chain, residues)
-            if sel:
-                all_selections.append(f"({sel})")
+        for detail in motif_details:
+            residue_tuples = detail.get('residues', [])
+            # Extract chain_residues from tuples
+            chain_residues = {}
+            for res_tuple in residue_tuples:
+                if isinstance(res_tuple, tuple) and len(res_tuple) >= 3:
+                    nucleotide, resi, chain = res_tuple[0], res_tuple[1], res_tuple[2]
+                    if chain not in chain_residues:
+                        chain_residues[chain] = []
+                    chain_residues[chain].append(resi)
+            
+            for chain, residues in chain_residues.items():
+                sel = SelectionParser.create_selection_string(chain, residues)
+                if sel:
+                    all_selections.append(f"({sel})")
         
         if all_selections:
             combined_sel = " or ".join(all_selections)
@@ -266,7 +270,7 @@ class UnifiedMotifLoader:
         obj_name = self.selector.create_motif_class_object(
             structure_name,
             motif_type_upper,
-            motif_list,
+            motif_details,
         )
         
         if obj_name:
@@ -288,7 +292,6 @@ class UnifiedMotifLoader:
                 'structure_name': structure_name,
                 'count': len(instances),
                 'visible': True,
-                'motifs': motif_list,
                 'motif_details': motif_details,
                 'color_rgb': color_rgb,
                 'main_selection': main_motif_sel if all_selections else None,
