@@ -15,20 +15,6 @@ RNA Motif Visualizer is a PyMOL plugin designed for structural biologists and co
 **Key innovation:** A unified framework that standardizes heterogeneous RNA motif annotations across multiple databases and tools, enabling automated, structurally consistent visualization and comparative analysis within PyMOL.
 
 ---
-
-## ✨ Key Features
-
-| Feature | Benefit | Use Case |
-|---------|---------|----------|
-| **Multi-Source Integration** | Compare annotation standards (BGSU, Rfam, RNA 3D Atlas, custom) | Resolve motif definition disagreements |
-| **Instant Source Switching** | Load structure once, switch databases without re-download | 10× faster multi-database analysis |
-| **Custom Annotation Support** | Import FR3D XML, RNAMotifScan JSON, user-defined CSV | Validate computational predictions |
-| **Dual Chain ID Modes** | Support auth_asym_id (PDB) and label_asym_id (mmCIF) | Handle complex PDB entries transparently |
-| **Batch Image Export** | Generate publication-quality images programmatically | Automate figure generation |
-| **Interactive Explorer** | Zoom to individual motif instances with residue details | Hands-on structure learning |
-| **3000+ Structure Coverage** | BGSU API covers all known rRNA/RNA structures | Immediate access to canonical structures |
-| **Smart Caching** | 30-day API cache; avoid redundant downloads | Offline-capable after first fetch |
-
 ---
 
 ## 📦 Installation
