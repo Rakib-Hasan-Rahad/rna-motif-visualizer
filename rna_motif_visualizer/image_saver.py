@@ -9,7 +9,7 @@ Features:
 - Automatic image naming with instance ID, chain, and residue info
 
 Author: CBB LAB @Rakib Hasan Rahad
-Version: 2.1.0
+Version: 1.0.0
 """
 
 import os

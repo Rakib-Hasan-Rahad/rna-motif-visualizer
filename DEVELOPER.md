@@ -286,7 +286,7 @@ rmv_show 4-WAY JUNCTION (J4)    # Multi-word motif type
 
 ---
 
-#### `rmv_all`
+#### `rmv_show ALL`
 
 Resets the view to show all loaded motifs on the gray backbone.
 
@@ -365,11 +365,19 @@ rmv_summary SARCIN-RICIN 1    # Instance #1 details
 
 ---
 
-#### `rmv_status`
+#### `rmv_source` (no args)
 
-Shows current plugin status: loaded PDB, active source, chain mode, motif counts.
+Shows currently selected source, loaded PDB, chain mode, and motif counts.
 
-**Implementation:** `motif_status()` → `gui.print_status()`
+**Implementation:** `set_source()` (no args) → `gui.print_source_info()`
+
+---
+
+#### `rmv_reset`
+
+Deletes all PyMOL objects and resets the plugin to default state (source, PDB, colors, filters, chain mode).
+
+**Implementation:** `reset_plugin()` → `cmd.delete('all')` + resets all `gui.*` state attributes
 
 ---
 

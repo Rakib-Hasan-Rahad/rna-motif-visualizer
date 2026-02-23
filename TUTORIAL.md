@@ -32,7 +32,7 @@ A complete step-by-step guide for using the RNA Motif Visualizer PyMOL plugin (v
 
 1. Open PyMOL
 2. Go to **Plugin → Plugin Manager → Install New Plugin → Install from local file**
-3. Select the `rna_motif_visualizer` folder (or the ZIP archive)
+3. Select the `rna_motif_visualizer` folder (inside the ZIP archive)
 4. Restart PyMOL
 
 After launching PyMOL, you should see:
@@ -41,8 +41,8 @@ After launching PyMOL, you should see:
 ================================================================================
                     🧬 RNA MOTIF VISUALIZER 🧬
 
- Version 2.3.0
- Last Updated: 20 February 2026
+ Version 1.0.0
+ Last Updated: 23 February 2026
 ================================================================================
 ```
 
@@ -68,7 +68,7 @@ This downloads the structure from RCSB PDB and loads it into PyMOL:
 [INFO] Chains found: 0, 9, A, B, C, D, ...
 ```
 
-> **Note:** Only the structure is loaded at this point — no motif data yet. This makes loading fast and lets you pick a data source first.
+> **Note:** Only the structure is loaded at this point, no motif data yet. This makes loading fast and lets you pick a data source first.
 
 ### Step 2 — Select a Data Source
 
@@ -153,14 +153,6 @@ rmv_show HL          # Render hairpin loops
 
 ## 3. Exploring Motifs
 
-### View All Motif Types
-
-```
-rmv_summary
-```
-
-Prints a count of each motif type found in the loaded PDB.
-
 ### View Instances of a Specific Motif Type
 
 ```
@@ -204,46 +196,15 @@ rmv_show SARCIN-RICIN # Show all sarcin-ricin motifs
 rmv_show GNRA 1       # Show and color only instance 1 of GNRA
 ```
 
-### Reset View
+### Show all motif types and create objects
 
 ```
-rmv_all               # Reset view: show all motifs on gray structure
+rmv_show ALL           # Show all motif types with objects
 ```
 
----
 
-## 4. Viewing Instances
 
-### Zoom Into a Single Instance
-
-```
-rmv_show GNRA 1
-```
-
-This will:
-- Create an individual PyMOL object for the instance
-- Zoom the camera to that instance
-- Print residue-level details (chain, residue numbers, nucleotides)
-
-### Navigate Between Instances
-
-```
-rmv_show GNRA 1    # View instance 1
-rmv_show GNRA 2    # View instance 2
-rmv_show GNRA 3    # View instance 3
-rmv_all                # Back to full view
-```
-
-### Toggle Motif Visibility
-
-```
-rmv_toggle HL off      # Hide hairpin loops
-rmv_toggle HL on       # Show them again
-```
-
----
-
-## 5. Working with Data Sources
+## 3. Working with Data Sources
 
 ### Local Sources (Offline — No Internet Needed)
 
@@ -273,7 +234,7 @@ rmv_motifs
 
 ### Switch Sources Without Reloading PDB
 
-One of the most powerful features — the PDB structure stays loaded while you switch sources:
+One of the most useful features — the PDB structure stays loaded while you switch sources:
 
 ```
 rmv_fetch 1S72         # Load once
@@ -292,7 +253,7 @@ rmv_motifs             # Fetch from Rfam
 ```
 rmv_sources            # List all 7 sources, their types, and coverage
 rmv_source info 3      # Detailed information about BGSU source
-rmv_status             # Current plugin status: loaded PDB, active source, motif counts
+rmv_source             # Show currently selected source, loaded PDB, motif counts
 ```
 
 ---
@@ -321,7 +282,7 @@ rmv_summary
 ### How Merging Works
 
 1. **Fetch** — motifs are fetched from each source independently
-2. **Enrich** — generic names (e.g., "HL") get enriched to specific names (e.g., "GNRA") using NR homolog representative lookup
+2. **Enrich** — First generic names (e.g., "HL") get enriched to specific names (e.g., "GNRA") using NR homolog representative lookup
 3. **Cascade Merge** — right-to-left merging with Jaccard deduplication (≥60% residue overlap = duplicate, kept once)
 
 ### Source-Tagged PyMOL Objects
@@ -352,7 +313,7 @@ Use your own motif annotation files from FR3D, RNAMotifScan (RMS), or RNAMotifSc
 
 ### Directory Setup
 
-Place your annotation files in:
+Place your annotation files in but make sure the output_file format matches the current one:
 
 ```
 rna_motif_visualizer/database/user_annotations/
@@ -464,7 +425,6 @@ Any motif type not in this table gets a unique auto-assigned color (bright orang
 rmv_save ALL                  # Default representation (cartoon)
 rmv_save ALL sticks           # Sticks representation
 rmv_save ALL spheres          # Spheres representation
-rmv_save ALL cartoon+sticks   # Combined representation
 ```
 
 Images are saved to `motif_images/<PDB_ID>/<MOTIF_TYPE>/` inside the plugin directory.
@@ -586,10 +546,10 @@ rmv_summary SARCIN-RICIN
 rmv_refresh 1S72       # Re-fetch from API, ignore 30-day cache
 ```
 
-### Check Plugin Status
+### Check Current Source
 
 ```
-rmv_status             # Loaded PDB, source, chain mode, motif counts
+rmv_source             # Show selected source, loaded PDB, chain mode, motif counts
 ```
 
 ### Quick Full Pipeline
@@ -631,7 +591,7 @@ rmv_summary GNRA               # How many GNRA instances?
 rmv_show GNRA                  # Color them on structure
 rmv_show GNRA 1                # Zoom to instance 1
 rmv_show GNRA 2                # Zoom to instance 2
-rmv_all                        # Reset view
+rmv_show ALL                    # Show all motif types
 rmv_save GNRA sticks           # Save all GNRA images as sticks
 rmv_save current               # Save current view
 ```
@@ -648,9 +608,10 @@ rmv_load 1S72          # Loads PDB + fetches motifs all at once
 ### Reset Everything
 
 ```
-delete all             # PyMOL command: delete all objects
-rmv_fetch 1S72         # Start fresh
+rmv_reset              # Delete all objects, reset plugin to default settings
 ```
+
+This clears the entire PyMOL session (all objects, selections) and resets the plugin state (source, PDB, colors, filters) back to defaults — like a fresh start without restarting PyMOL.
 
 ---
 
@@ -667,19 +628,20 @@ rmv_fetch 1S72         # Start fresh
 | Render | `rmv_show <TYPE>` | Render all instances of a type |
 | Render | `rmv_show <TYPE> <N>` | Render a specific instance |
 | Zoom | `rmv_show <TYPE> <N>` | Zoom to instance |
-| Reset | `rmv_all` | Reset to full view |
+| Show All | `rmv_show ALL` | Show all motif types with objects |
 | Save | `rmv_save ALL` | Save all motif images |
 | Save | `rmv_save current` | Save current view (high-res) |
 | Help | `rmv_help` | Full command reference |
 | Info | `rmv_sources` | List all data sources |
-| Info | `rmv_status` | Plugin status |
+| Info | `rmv_source` | Show currently selected source |
 | Info | `rmv_chains` | Chain ID diagnostics |
 | Color | `rmv_color <TYPE> <COLOR>` | Change motif color |
 | Color | `rmv_colors` | View color legend |
 | Toggle | `rmv_toggle <TYPE> on/off` | Toggle visibility |
 | Background | `rmv_bg_color <COLOR>` | Change backbone color |
-| Refresh | `rmv_refresh [PDB]` | Force API cache refresh |
+| Refresh | `rmv_refresh` | Force API cache refresh |
+| Reset | `rmv_reset` | Delete all objects & reset plugin |
 
 ---
 
-*RNA Motif Visualizer v2.3.0 — CBB LAB @Rakib Hasan Rahad*
+*RNA Motif Visualizer v1.0.0 — CBB LAB KU @Rakib Hasan Rahad*

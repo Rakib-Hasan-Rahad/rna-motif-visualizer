@@ -2,7 +2,7 @@
 RNA Motif Visualizer - Main Plugin Module
 PyMOL plugin for visualizing RNA structural motifs with multi-database support.
 
-Version: 2.3.0
+Version: 1.0.0
 Author: CBB LAB @Rakib Hasan Rahad
 License: MIT
 
@@ -86,33 +86,33 @@ def __init_plugin__(app):
     initialize_gui()
     
     # Print professional welcome message
-    last_updated = "20 February 2026"
+    last_updated = "23 February 2026"
     print("\n" + "="*80)
-    print("┌" + " "*78 + "┐")
-    print("│" + " "*20 + "🧬 RNA MOTIF VISUALIZER 🧬" + " "*32 + "│")
-    print("│" + " "*78 + "│")
-    print("│" + " Version 2.3.0" + " "*63 + "│")
-    print("│" + " Last Updated: " + last_updated + " "*42 + "│")
-    print("│" + " "*78 + "│")
-    print("│" + " Multi-source RNA structural motif visualization for PyMOL" + " "*18 + "│")
-    print("│" + " Fast loading: Load PDB first, select source, fetch motifs" + " "*19 + "│")
-    print("│" + " "*78 + "│")
-    print("└" + " "*78 + "┘")
+    print("\u250c" + " "*78 + "\u2510")
+    print("\u2502" + " "*20 + "\U0001f9ec RNA MOTIF VISUALIZER \U0001f9ec" + " "*32 + "\u2502")
+    print("\u2502" + " "*78 + "\u2502")
+    print("\u2502" + " Version 1.0.0" + " "*63 + "\u2502")
+    print("\u2502" + " Last Updated: " + last_updated + " "*42 + "\u2502")
+    print("\u2502" + " "*78 + "\u2502")
+    print("\u2502" + " Multi-source RNA structural motif visualization for PyMOL" + " "*18 + "\u2502")
+    print("\u2502" + " Fast loading: Load PDB first, select source, fetch motifs" + " "*19 + "\u2502")
+    print("\u2502" + " "*78 + "\u2502")
+    print("\u2514" + " "*78 + "\u2518")
     print("="*80)
-    print("\n📊 AVAILABLE DATA SOURCES:")
-    print("   • Local:       RNA 3D Atlas [1], Rfam [2] (offline)")
-    print("   • Online:      BGSU RNA 3D Hub [3], Rfam API [4]")
-    print("   • Annotations: FR3D [5], RNAMotifScan [6], RNAMotifScanX [7]")
-    print("\n⚡ QUICK START:")
+    print("\n\U0001f4ca AVAILABLE DATA SOURCES:")
+    print("   \u2022 Local:       RNA 3D Atlas [1], Rfam [2] (offline)")
+    print("   \u2022 Online:      BGSU RNA 3D Hub [3], Rfam API [4]")
+    print("   \u2022 Annotations: FR3D [5], RNAMotifScan [6], RNAMotifScanX [7]")
+    print("\n\u26a1 QUICK START:")
     print("   rmv_fetch 1S72            # Load PDB structure")
     print("   rmv_source 3              # Select BGSU API source")
     print("   rmv_motifs                # Fetch motif data from source")
     print("   rmv_summary               # Show available motifs")
     print("   rmv_show HL               # Render hairpin loops")
-    print("\n📚 COMMANDS & HELP:")
+    print("\n\U0001f4da COMMANDS & HELP:")
     print("   rmv_help                  # All available commands")
     print("   rmv_sources               # List all data sources")
-    print("   rmv_status                # Current plugin status")
+    print("   rmv_source                # Show currently selected source")
     print("\n" + "="*80 + "\n")
 
 

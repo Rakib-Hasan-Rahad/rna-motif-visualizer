@@ -11,7 +11,7 @@ The loader now uses the database registry to support multiple databases
 (RNA 3D Atlas, Rfam, etc.) with a unified interface.
 
 Author: CBB LAB @Rakib Hasan Rahad
-Version: 2.1.0
+Version: 1.0.0
 """
 
 import os
@@ -695,7 +695,7 @@ class VisualizationManager:
             if first_motif:
                 print(f"    rmv_show {first_motif:<20}  Highlight & view {first_motif} instances")
             print(f"    rmv_summary              Display this summary again")
-            print(f"    rmv_all                  Show all motifs (default view)")
+            print(f"    rmv_show ALL             Show all motif types with objects")
         print("=" * 50 + "\n")
     
     def show_motif_type(self, motif_type: str) -> bool:
@@ -822,7 +822,7 @@ class VisualizationManager:
         print("  Next steps:")
         print(f"    rmv_show {motif_type} <NO>         Zoom to specific instance (1-{len(motif_details)})")
         print(f"    rmv_show <OTHER_MOTIF>       Show different motif type")
-        print(f"    rmv_all                      Show all motifs")
+        print(f"    rmv_show ALL                 Show all motif types")
         print()
         return True
     
@@ -1292,7 +1292,7 @@ class VisualizationManager:
         if instance_no < len(motif_details):
             print(f"    rmv_show {motif_type} {instance_no+1}             View next instance")
         print(f"    rmv_show {motif_type}               Show all {motif_type} instances")
-        print(f"    rmv_all                      Show all motifs")
+        print(f"    rmv_show ALL                 Show all motif types")
         print()
         
         return True
@@ -1340,14 +1340,20 @@ class VisualizationManager:
     
     def show_all_motifs(self) -> None:
         """
-        Show all loaded motifs with full structure visible (reset to default view).
+        Show ALL loaded motif types — creates PyMOL objects for each type
+        (like calling rmv_show <TYPE> for every loaded motif type at once).
         
         Workflow:
-        1. Hide ALL separate motif objects (avoid overlap/stripe artifacts)
-        2. Show full PDB structure uniformly in gray80
-        3. Color each motif type's residues in the structure with their color
+        1. Create PyMOL objects for every loaded motif type (if not already created)
+        2. Hide individual instance objects (avoid clutter)
+        3. Show full PDB structure uniformly in gray80
+        4. Enable all motif-type objects and color their residues
         """
         loaded_motifs = self.motif_loader.get_loaded_motifs()
+        
+        if not loaded_motifs:
+            self.logger.error("No motifs loaded. Use 'rmv_motifs' first.")
+            return
         
         # Get structure name
         structure_name = None
@@ -1360,45 +1366,63 @@ class VisualizationManager:
             self.logger.error("No structure loaded")
             return
         
-        # Hide ALL separate motif objects (prevents overlap/stripes)
+        # Step 1: Create PyMOL objects for each motif type (like show_motif_type does)
         for motif_type, info in loaded_motifs.items():
             obj_name = info.get('object_name')
-            if obj_name:
-                self.cmd.disable(obj_name)
-            
-            # Also disable individual instance objects
+            motif_list = info.get('motifs', [])
             source_suffix = info.get('source_suffix', '')
-            motif_details = info.get('motif_details', [])
-            for i in range(1, len(motif_details) + 1):
-                try:
-                    inst_name = sanitize_pymol_name(f"{motif_type}_{i}{source_suffix}")
-                    self.cmd.disable(inst_name)
-                except:
-                    pass
+            
+            if not obj_name and motif_list:
+                obj_name = self.motif_loader.selector.create_motif_class_object(
+                    structure_name,
+                    motif_type,
+                    motif_list,
+                    source_suffix=source_suffix,
+                )
+                if obj_name:
+                    colors.set_motif_color_in_pymol(self.cmd, obj_name, motif_type)
+                    info['object_name'] = obj_name
+                    loaded_motifs[motif_type] = info
+                    self.logger.debug(f"Created PyMOL object: {obj_name}")
         
-        # Show the full structure with uniform representation
+        # Step 2: Hide individual instance objects (avoid clutter)
+        for obj in self.cmd.get_object_list():
+            for mt, mt_info in loaded_motifs.items():
+                mt_sanitized = sanitize_pymol_name(mt)
+                suffix = mt_info.get('source_suffix', '')
+                prefix = sanitize_pymol_name(f"{mt_sanitized}{suffix}")
+                if obj.startswith(f"{prefix}_") and obj[len(prefix)+1:].isdigit():
+                    self.cmd.disable(obj)
+        
+        # Step 3: Show the full structure with uniform representation
         self.cmd.enable(structure_name)
         self.cmd.show('cartoon', f"{structure_name} and polymer.nucleic")
         self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
         self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
         
-        # Step 3: Color the ENTIRE structure gray80 first
+        # Color the ENTIRE structure gray80 first
         self.cmd.color('gray80', f"{structure_name} and polymer.nucleic")
         
-        # Color each motif type's residues in their color
+        # Step 4: Enable all motif-type objects and color residues on the structure
+        total_instances = 0
+        from .utils.parser import SelectionParser
         for motif_type, info in loaded_motifs.items():
+            # Enable the motif-type PyMOL object
+            obj_name = info.get('object_name')
+            if obj_name:
+                self.cmd.enable(obj_name)
+            
             motif_details = info.get('motif_details', [])
             if not motif_details:
                 continue
+            total_instances += len(motif_details)
             
-            # Color each instance individually to avoid PyMOL selection string length limits
-            from .utils.parser import SelectionParser
+            # Color each instance's residues on the main structure
             for detail in motif_details:
                 residues = detail.get('residues', [])
                 if not residues:
                     continue
                 
-                # Build selection for this individual instance
                 chain_residues = {}
                 for res in residues:
                     if isinstance(res, tuple) and len(res) >= 3:
@@ -1407,7 +1431,6 @@ class VisualizationManager:
                             chain_residues[chain] = []
                         chain_residues[chain].append(resi)
                 
-                # Create selection for this instance and color it
                 selections = []
                 for chain, resi_list in chain_residues.items():
                     sel = SelectionParser.create_selection_string(chain, sorted(resi_list))
@@ -1417,21 +1440,27 @@ class VisualizationManager:
                 if selections:
                     combined_sel = " or ".join(selections)
                     instance_sel = f"({structure_name}) and ({combined_sel})"
-                    # Show and color this instance
                     try:
                         self.cmd.show('cartoon', instance_sel)
                         colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)
                     except Exception as e:
                         self.logger.debug(f"Could not color instance {motif_type}: {e}")
         
-        self.logger.info("All motifs shown")
+        self.logger.success(f"Showing all {len(loaded_motifs)} motif types ({total_instances} total instances)")
+        
+        # Print summary of created objects
+        print(f"\n  PyMOL objects created for {len(loaded_motifs)} motif types:")
+        for motif_type, info in sorted(loaded_motifs.items()):
+            obj_name = info.get('object_name', 'N/A')
+            count = len(info.get('motif_details', []))
+            print(f"    {obj_name:<25} {motif_type} ({count} instances)")
         
         # Print follow-up suggestions
         print("\n  Next steps:")
         if loaded_motifs:
             first_motif = next(iter(sorted(loaded_motifs.keys())), None)
             if first_motif:
-                print(f"    rmv_show {first_motif:<20}  Highlight specific motif type")
+                print(f"    rmv_show {first_motif:<20}  Focus on specific motif type")
         print(f"    rmv_summary              View motif summary table")
         print(f"    rmv_save ALL             Save all motif images")
         print(f"    rmv_save HL              Save specific motif type images")

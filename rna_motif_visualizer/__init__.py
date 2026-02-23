@@ -4,8 +4,7 @@ PyMOL plugin for visualizing RNA structural motifs from multiple databases.
 
 This package provides:
 - 7 data sources (Atlas, Rfam, BGSU API, Rfam API, FR3D, RMS, RMSX)
-- Split fetch pipeline: load PDB first, select source, fetch motifs
-- Multi-source combine with cascade merge and Jaccard deduplication
+- Multi-source combine with cascade merge
 - Label chain ID support (cif_use_auth=0)
 - High-resolution image export with 8 representation options
 - 18 PyMOL commands (rmv_help for full reference)
@@ -19,8 +18,8 @@ Version: 2.3.0
 # PyMOL injects/provides the `pymol` module at runtime; importing it in a
 # regular Python interpreter (e.g., during CLI tests) will fail.
 
-__version__ = '2.3.0'
-__author__ = 'CBB LAB @Rakib Hasan Rahad'
+__version__ = '1.0.0'
+__author__ = 'CBB LAB KU @Rakib Hasan Rahad'
 
 
 def __getattr__(name):

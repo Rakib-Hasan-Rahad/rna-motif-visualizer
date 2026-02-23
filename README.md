@@ -10,139 +10,9 @@
 
 ## Overview
 
-RNA Motif Visualizer is a PyMOL plugin designed for structural biologists and computational RNA researchers. It automates the detection, visualization, and comparative analysis of RNA structural motifs across 3000+ PDB structures. The plugin integrates multiple data sources (BGSU RNA 3D Hub, Rfam, FR3D, RNAMotifScan) to enable rapid annotation validation, multi-database comparison, and publication-quality image generation.
+RNA Motif Visualizer is a PyMOL plugin designed for structural biologists and computational RNA researchers. It automates the detection, visualization, and comparative analysis of RNA structural motifs. The plugin integrates multiple data sources (BGSU RNA 3D Motif Atlas, Rfam, FR3D, RNAMotifScan) to enable rapid annotation validation, multi-database comparison, and high-quality batch image generation.
 
-**Key innovation:** Load structure once, switch between annotation sources instantly—reducing interactive analysis time from minutes to seconds.
-
----
-
-## 🎯 Use Cases
-
-### 1. **High-Throughput Motif Validation**
-*Scenario: Validate computational motif predictions on 3D structures*
-
-- Load a ribosomal structure (e.g., 1S72, 4V88)
-- Compare motif annotations from BGSU, Rfam, and custom prediction tools
-- Highlight discrepancies between databases in seconds
-- Export consensus motif definitions for publication
-
-**Research Impact:** Accelerate validation pipelines for machine learning models predicting RNA motifs.
-
-```
-rmv_fetch 4V88              # Load ribosomal LSU
-rmv_source 3                # Select BGSU (most comprehensive)
-rmv_motifs
-rmv_summary                 # View 200+ annotated motifs
-rmv_show "SARCIN-RICIN"     # Visualize sarcin-ricin motif
-rmv_save current            # Publication-quality image
-```
-
----
-
-### 2. **Comparative Multi-Database Analysis**
-*Scenario: Assess motif definitions across Rfam, BGSU, and RNA 3D Atlas*
-
-- Load structure with BGSU annotations (online API, real-time)
-- Switch to Rfam for alternative nomenclature
-- Switch to local RNA 3D Atlas for historical consistency
-- Identify motif overlaps and gaps
-
-**Research Impact:** Resolve structural ambiguities and improve motif taxonomy.
-
-```
-rmv_fetch 1S72
-rmv_source 3                # BGSU API
-rmv_motifs
-rmv_summary GNRA            # 23 GNRA instances
-rmv_show GNRA
-cmd.hide("cartoon")         # Focus on motif
-
-rmv_source 4                # Switch to Rfam (no re-download!)
-rmv_motifs
-rmv_summary GNRA            # Compare instances
-rmv_show GNRA
-```
-
----
-
-### 3. **Custom Annotation Validation & Visualization**
-*Scenario: Validate in-house predictions or third-party tool outputs (FR3D, RNAMotifScan)*
-
-- Load local PDB file or fetch from RCSB
-- Import custom motif annotations (FR3D XML, RNAMotifScan JSON, custom CSV)
-- Overlay predictions on 3D structure
-- Validate using chain ID and residue mapping
-- Generate visual evidence for publication
-
-**Research Impact:** Integrate computational pipelines; automate annotation QC; create reproducible workflows.
-
-```
-rmv_fetch 1S72
-rmv_source 5                # FR3D annotations
-rmv_motifs
-rmv_summary                 # Your FR3D predictions
-rmv_show "HL"               # View hairpin loops from your tool
-rmv_save ALL                # Batch export all instances
-```
-
----
-
-### 4. **Interactive Structure Exploration for Education**
-*Scenario: Teach students RNA motif taxonomy and 3D structure relationships*
-
-- Load canonical structures (ribosomal subunits, tRNAs, snRNAs)
-- Highlight all motifs of a specific type
-- Zoom to individual instances with residue labels
-- Switch between cartoon, sticks, surface representations
-- Export labeled images for presentations/papers
-
-**Research Impact:** Accelerate structural literacy; create teaching materials.
-
-```
-rmv_fetch 1S72              # 23S rRNA
-rmv_source 3
-rmv_motifs
-rmv_show "KINK-TURN"        # Highlight K-turns
-rmv_show "KINK-TURN" 3      # Details of 3rd instance
-```
-
----
-
-### 5. **Publication-Quality Image Generation**
-*Scenario: Generate figures for structural biology papers*
-
-- Fetch structure + motifs
-- Select motif(s) of interest
-- Render in high-quality cartoon with motif highlights
-- Export publication-ready PNG/session files
-
-**Research Impact:** Reduce manual model preparation; ensure figure reproducibility.
-
-```
-rmv_fetch 4V9D              # Ribosomal LSU
-rmv_source 3
-rmv_motifs
-rmv_show "TRIPLE SHEARED"   # 3 instances
-rmv_save current            # ~300 dpi high-res PNG
-```
-
----
-
-### 6. **Chain ID Format Handling for Legacy & mmCIF Data**
-*Scenario: Work with structures using different chain ID conventions (auth vs. label)*
-
-- Load structure with optional chain ID mode selection
-- Seamlessly map custom annotations to correct chains
-- Support both PDB (`auth_asym_id`) and mmCIF (`label_asym_id`) conventions
-
-**Research Impact:** Enable analysis of complex multi-model structures; ensure annotation reproducibility.
-
-```
-rmv_fetch 1S72 cif_use_auth=0    # Use label chain IDs (mmCIF standard)
-rmv_source 7                      # RNAMotifScanX (uses label IDs)
-rmv_motifs
-rmv_summary                       # Display in label chain format
-```
+**Key innovation:** A unified framework that standardizes heterogeneous RNA motif annotations across multiple databases and tools, enabling automated, structurally consistent visualization and comparative analysis within PyMOL.
 
 ---
 
@@ -250,7 +120,7 @@ rmv_save ALL             # Batch export all motif instances
 |---------|-------------|
 | `rmv_show <MOTIF_TYPE>` | Highlight all instances of motif type |
 | `rmv_show <MOTIF_TYPE> <NO>` | Zoom to specific instance #NO |
-| `rmv_all` | Show all motifs (reset view) |
+| `rmv_show ALL` | Show all motif types with objects |
 | `rmv_toggle <MOTIF_TYPE> on/off` | Show/hide motif type |
 | `rmv_color <MOTIF_TYPE> <COLOR>` | Change motif color at runtime |
 | `rmv_colors` | Display color legend |
@@ -263,7 +133,9 @@ rmv_save ALL             # Batch export all motif instances
 | `rmv_summary` | Show motif type counts |
 | `rmv_summary <MOTIF_TYPE>` | Show instances of specific type |
 | `rmv_chains` | Show chain IDs + CIF mode status |
-| `rmv_status` | Current plugin status |
+| `rmv_source` | Show currently selected source |
+| `rmv_source info <N>` | Detailed info about a specific source |
+| `rmv_reset` | Delete all objects & reset plugin to defaults |
 | `rmv_help` | Full command reference |
 
 ### Custom Annotations
@@ -455,7 +327,7 @@ rna-motif-visualizer/
 ├── rna_motif_visualizer/
 │   ├── __init__.py                  # Package init, version info
 │   ├── plugin.py                    # PyMOL plugin entry point
-│   ├── gui.py                       # Command handlers (18 commands)
+│   ├── gui.py                       # Command handlers (17 commands)
 │   ├── loader.py                    # Rendering & visualization logic
 │   ├── colors.py                    # Motif color definitions
 │   ├── database/

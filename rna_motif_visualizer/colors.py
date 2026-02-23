@@ -5,7 +5,7 @@ Defines unique colors for each motif class for clear visualization.
 Supports both RNA 3D Atlas and Rfam motif types with distinct, vibrant colors.
 
 Author: CBB LAB @Rakib Hasan Rahad
-Version: 2.1.0
+Version: 1.0.0
 """
 
 # ==============================================================================
@@ -71,6 +71,26 @@ MOTIF_COLORS = {
     'DOCKING_ELBOW': (0.7, 0.5, 0.3),       # Tan
     'DOCKING-ELBOW': (0.7, 0.5, 0.3),       # Alias
     
+    # E-Loop
+    'E_LOOP': (0.2, 0.6, 0.2),              # Forest green
+    'E-LOOP': (0.2, 0.6, 0.2),              # Forest green (alias)
+    
+    # K-turn (generic / without number suffix)
+    'K_TURN': (0.0, 0.6, 1.0),              # Bright blue (same as K_TURN_1)
+    'K-TURN': (0.0, 0.6, 1.0),              # Alias
+    'KINK_TURN': (0.0, 0.5, 0.9),           # Blue variant
+    'KINK-TURN': (0.0, 0.5, 0.9),           # Alias
+    
+    # Reverse K-turn
+    'REVERSE_KTURN': (0.6, 0.3, 0.9),       # Blue-violet
+    'REVERSE-KTURN': (0.6, 0.3, 0.9),       # Alias
+    'REVERSE_K_TURN': (0.6, 0.3, 0.9),      # Alias
+    'REVERSE-K-TURN': (0.6, 0.3, 0.9),      # Alias
+    
+    # Sarcin-ricin (generic / without number suffix)
+    'SARCIN_RICIN': (0.8, 0.2, 0.2),        # Dark red (same as SARCIN_RICIN_1)
+    'SARCIN-RICIN': (0.8, 0.2, 0.2),        # Alias
+    
     # Other structural motifs
     'TANDEM_GA': (0.9, 0.5, 0.9),           # Light magenta
     'TANDEM-GA': (0.9, 0.5, 0.9),           # Alias
@@ -108,6 +128,36 @@ MOTIF_COLORS = {
 # Backup color for undefined motif types
 DEFAULT_COLOR = (1.0, 0.5, 0.0)  # Bright orange
 
+# ==============================================================================
+# DYNAMIC COLOR POOL
+# ==============================================================================
+# Visually distinct colors for motif types not in the predefined list.
+# Each unknown type gets the next unused color from this pool.
+_DYNAMIC_COLOR_POOL = [
+    (0.85, 0.15, 0.50),   # Crimson-rose
+    (0.10, 0.70, 0.30),   # Emerald
+    (0.55, 0.35, 0.85),   # Amethyst
+    (0.95, 0.75, 0.10),   # Amber
+    (0.20, 0.55, 0.75),   # Steel blue
+    (0.80, 0.40, 0.20),   # Rust
+    (0.40, 0.85, 0.60),   # Mint green
+    (0.75, 0.20, 0.70),   # Fuchsia
+    (0.30, 0.80, 0.90),   # Aqua
+    (0.90, 0.55, 0.35),   # Peach
+    (0.50, 0.70, 0.20),   # Chartreuse
+    (0.65, 0.25, 0.45),   # Plum
+    (0.25, 0.45, 0.65),   # Denim
+    (0.85, 0.65, 0.50),   # Camel
+    (0.45, 0.90, 0.45),   # Lime green
+    (0.70, 0.50, 0.80),   # Wisteria
+    (0.95, 0.40, 0.55),   # Watermelon
+    (0.35, 0.65, 0.50),   # Sage
+    (0.80, 0.80, 0.30),   # Olive gold
+    (0.55, 0.30, 0.60),   # Grape
+]
+_dynamic_color_index = 0
+_dynamic_assigned = {}  # Tracks dynamically assigned motif type → color
+
 # PyMOL color names for common types
 PYMOL_COLOR_NAMES = {
     # Atlas types
@@ -120,9 +170,21 @@ PYMOL_COLOR_NAMES = {
     'J7': 'blue',
     # Rfam types
     'GNRA': 'teal',
+    'UNCG': 'brown-orange',
+    'CUYG': 'purple',
     'T_LOOP': 'pink',
+    'C_LOOP': 'sky-blue',
+    'E_LOOP': 'forest-green',
+    'U_TURN': 'gold',
+    'K_TURN': 'bright-blue',
     'K_TURN_1': 'marine',
+    'K_TURN_2': 'medium-blue',
+    'REVERSE_KTURN': 'blue-violet',
+    'SARCIN_RICIN': 'dark-red',
     'SARCIN_RICIN_1': 'firebrick',
+    'SARCIN_RICIN_2': 'coral-red',
+    'PK_TURN': 'violet',
+    'KINK_TURN': 'blue',
 }
 
 
@@ -226,7 +288,8 @@ def set_custom_motif_color(motif_type, color):
 def get_color(motif_type):
     """
     Get RGB color tuple for a motif type.
-    Checks custom colors first, then defaults.
+    Checks custom colors first, then predefined, then assigns a unique
+    dynamic color so every motif type always gets its own color.
     
     Args:
         motif_type (str): Motif type identifier
@@ -234,6 +297,7 @@ def get_color(motif_type):
     Returns:
         tuple: RGB color values (0-1 range)
     """
+    global _dynamic_color_index
     # Normalize: uppercase and convert dashes to underscores
     normalized = str(motif_type).upper().replace('-', '_')
     # Check custom colors first
@@ -241,7 +305,30 @@ def get_color(motif_type):
         custom = CUSTOM_COLORS[normalized]
         if isinstance(custom, tuple):
             return custom
-    return MOTIF_COLORS.get(normalized, DEFAULT_COLOR)
+    # Check predefined colors
+    if normalized in MOTIF_COLORS:
+        return MOTIF_COLORS[normalized]
+    # Check previously assigned dynamic colors
+    if normalized in _dynamic_assigned:
+        return _dynamic_assigned[normalized]
+    # Assign next unique color from the dynamic pool
+    if _dynamic_color_index < len(_DYNAMIC_COLOR_POOL):
+        color = _DYNAMIC_COLOR_POOL[_dynamic_color_index]
+        _dynamic_color_index += 1
+    else:
+        # Pool exhausted — generate a pseudo-random but deterministic color
+        import hashlib
+        h = hashlib.md5(normalized.encode()).hexdigest()
+        r = int(h[:2], 16) / 255.0
+        g = int(h[2:4], 16) / 255.0
+        b = int(h[4:6], 16) / 255.0
+        # Ensure it's not too close to gray80 (0.8, 0.8, 0.8)
+        if abs(r - 0.8) < 0.15 and abs(g - 0.8) < 0.15 and abs(b - 0.8) < 0.15:
+            r = min(r + 0.3, 1.0)
+        color = (r, g, b)
+    _dynamic_assigned[normalized] = color
+    MOTIF_COLORS[normalized] = color  # Cache for future lookups
+    return color
 
 
 def set_background_color(color_name):
