@@ -1196,7 +1196,7 @@ class MotifVisualizerGUI:
         print("│  rmv_fetch <ID> cif_use_auth=0  Load with label_asym_id chains          │")
         print("│  rmv_motifs                Fetch motif data from selected source         │")
         print("│  rmv_load <PDB_ID>         Load structure with motif visualization      │")
-        print("│  rmv_refresh [PDB_ID]      Force refresh motifs from API                │")
+        print("│  rmv_refresh               Force refresh cache and collect again       │")
         print("├" + "─"*78 + "┤")
         print("│  🎨 VISUALIZATION                                                       │")
         print("├" + "─"*78 + "┤")
@@ -2073,51 +2073,61 @@ class MotifVisualizerGUI:
     
     def refresh_motifs_action(self, pdb_id: str = None):
         """
-        Force refresh motifs from API (bypass cache).
+        Force refresh cache and collect motif data again.
+        
+        Uses the last loaded PDB and last selected source (or combined sources).
+        Clears the cached data for that PDB, then re-fetches fresh motif data
+        from the same source(s) that were last used.
         
         Args:
-            pdb_id (str): PDB ID to refresh (uses current if not specified)
+            pdb_id (str): PDB ID to refresh (uses currently loaded PDB if not specified)
         """
         try:
-            info = self.viz_manager.get_structure_info()
+            # Determine PDB ID — use current if not specified
+            if not pdb_id:
+                pdb_id = self.loaded_pdb_id
             
             if not pdb_id:
-                pdb_id = info.get('pdb_id')
-            
-            if not pdb_id:
-                self.logger.error("No PDB ID specified and no structure loaded")
+                self.logger.error("No structure loaded. Use rmv_fetch <PDB_ID> first.")
                 return
             
             pdb_id = pdb_id.upper()
-            self.logger.info(f"Force refreshing motifs for {pdb_id} from API...")
+            
+            # Determine which source(s) to refresh from
+            if not self.current_source_mode:
+                self.logger.error("No source selected. Use rmv_source <N> first.")
+                return
+            
+            # Describe what we're refreshing
+            if self.current_source_mode == 'combine' and self.combined_source_ids:
+                source_desc = f"combined sources {self.combined_source_ids}"
+            elif self.current_source_mode == 'user':
+                source_desc = f"user annotations ({self.current_user_tool or 'unknown'})"
+            elif self.current_source_mode == 'local':
+                source_desc = f"local ({self.current_local_source or 'auto'})"
+            elif self.current_source_mode == 'web':
+                source_desc = f"API ({self.current_web_source or 'auto'})"
+            else:
+                source_desc = self.current_source_mode
+            
+            self.logger.info(f"Clearing cache and re-collecting motifs for {pdb_id} from {source_desc}...")
             
             # Clear cache for this PDB
             from .database import get_source_selector
             source_selector = get_source_selector()
             
-            if source_selector:
-                # Pass specific source if one is selected
-                source_override = None
-                if self.current_source_mode == 'local' and self.current_local_source:
-                    source_override = self.current_local_source
-                elif self.current_source_mode == 'web' and self.current_web_source:
-                    web_source_map = {'bgsu': 'bgsu_api', 'rfam_api': 'rfam_api'}
-                    source_override = web_source_map.get(self.current_web_source)
-                
-                motifs, source = source_selector.get_motifs_for_pdb(pdb_id, force_refresh=True, source_override=source_override)
-                
-                if motifs:
-                    total = sum(len(v) for v in motifs.values())
-                    self.logger.success(f"Refreshed {total} motifs from {source}")
-                    
-                    # If this is the currently loaded structure, reload visualization
-                    if info.get('pdb_id') == pdb_id and info.get('structure'):
-                        self.logger.info("Reloading visualization...")
-                        self.viz_manager.reload_with_database(None)
-                else:
-                    self.logger.warning(f"No motifs found for {pdb_id} in any source")
-            else:
-                self.logger.error("Source selector not available - API sources may not be initialized")
+            if source_selector and hasattr(source_selector, '_cache_manager'):
+                try:
+                    source_selector._cache_manager.clear_cache_for_pdb(pdb_id)
+                    self.logger.debug(f"Cleared cache entries for {pdb_id}")
+                except Exception:
+                    pass  # Cache clearing is best-effort
+            
+            # Re-run the same fetch pipeline that rmv_motifs uses
+            self.fetch_motif_data_action(pdb_id)
+            
+            self.logger.success(f"Refresh complete for {pdb_id} from {source_desc}")
+            self.logger.info(f"Next: rmv_summary | rmv_show <TYPE>")
                 
         except Exception as e:
             self.logger.error(f"Failed to refresh motifs: {e}")
@@ -2565,11 +2575,14 @@ def initialize_gui():
             gui.set_source_mode(first_part)
     
     def refresh_motifs(pdb_id=''):
-        """PyMOL command: Force refresh motifs from API (bypass cache).
+        """PyMOL command: Force refresh cache and collect motif data again.
+        
+        Clears cached data for the currently loaded PDB and re-fetches
+        motif information from the last selected source (or combined
+        sources if combine mode was used).
         
         Usage:
-            rmv_refresh        - Refresh current structure
-            rmv_refresh 4V9F   - Refresh specific PDB
+            rmv_refresh        - Refresh current PDB from last selected source
         """
         pdb_arg = str(pdb_id).strip() if pdb_id else None
         gui.refresh_motifs_action(pdb_arg)
