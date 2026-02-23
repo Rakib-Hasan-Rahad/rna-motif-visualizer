@@ -44,7 +44,23 @@ You should see in the PyMOL terminal:
 
 ---
 
-## 🚀 Quick Start
+## � Installation Screenshots
+
+**Figure 1: Plugin Manager — Add Directory**
+![Plugin Manager Settings](images/1.jpg)
+
+**Figure 2: Select rna_motif_visualizer Folder**
+![Select Folder](images/2.jpg)
+
+**Figure 3: Plugin Installed Successfully**
+![Installation Complete](images/3.jpg)
+
+**Figure 4: PyMOL Ready with RNA Motif Visualizer**
+![PyMOL Ready](images/4.jpg)
+
+---
+
+## �🚀 Quick Start
 
 ### 1. See All Available Commands
 
