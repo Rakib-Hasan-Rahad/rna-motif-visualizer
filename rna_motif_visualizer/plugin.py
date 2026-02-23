@@ -14,8 +14,8 @@ Supports 7 data sources:
 
 Usage in PyMOL:
     rmv_fetch 1S72                # Load PDB structure
-    rmv_source 3                  # Select data source (BGSU)
-    rmv_motifs                    # Fetch motif data
+    rmv_db 3                      # Select data source (BGSU)
+    rmv_load_motif                # Fetch motif data
     rmv_summary                   # View motif summary
     rmv_show HL                   # Render hairpin loops
     rmv_help                      # Full command reference
@@ -105,14 +105,14 @@ def __init_plugin__(app):
     print("   \u2022 Annotations: FR3D [5], RNAMotifScan [6], RNAMotifScanX [7]")
     print("\n\u26a1 QUICK START:")
     print("   rmv_fetch 1S72            # Load PDB structure")
-    print("   rmv_source 3              # Select BGSU API source")
-    print("   rmv_motifs                # Fetch motif data from source")
+    print("   rmv_db 3                  # Select BGSU API source")
+    print("   rmv_load_motif            # Fetch motif data from source")
     print("   rmv_summary               # Show available motifs")
     print("   rmv_show HL               # Render hairpin loops")
     print("\n\U0001f4da COMMANDS & HELP:")
     print("   rmv_help                  # All available commands")
     print("   rmv_sources               # List all data sources")
-    print("   rmv_source                # Show currently selected source")
+    print("   rmv_source info           # Show currently selected source")
     print("\n" + "="*80 + "\n")
 
 

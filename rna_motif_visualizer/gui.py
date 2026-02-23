@@ -61,6 +61,9 @@ class MotifVisualizerGUI:
         # Track chain ID convention: 1 = auth_asym_id (default), 0 = label_asym_id
         self.cif_use_auth = 1
         self.auth_to_label_map = {}   # auth_asym_id → label_asym_id chain mapping
+        
+        # Track custom user annotation data path (for rmv_db 5/6/7 with path)
+        self.user_data_path = None
     
     def _get_source_suffix(self):
         """Get source suffix for PyMOL object naming (e.g., '_S3' for source 3).
@@ -205,7 +208,7 @@ class MotifVisualizerGUI:
     
     def fetch_motif_data_action(self, pdb_id, background_color=None):
         """
-        Load motif data for a structure WITHOUT creating PyMOL objects (for rmv_motifs).
+        Load motif data for a structure WITHOUT creating PyMOL objects (for rmv_load_motif).
         
         Handles combine mode by loading from multiple sources and merging.
         Uses self.loaded_pdb as the structure name (set by rmv_fetch).
@@ -559,8 +562,11 @@ class MotifVisualizerGUI:
             elif source_type == 'user':
                 # User annotations (FR3D, RMS, RMSX)
                 from .database.user_annotations import UserAnnotationProvider
-                plugin_dir = Path(__file__).parent
-                user_dir = plugin_dir / 'database' / 'user_annotations'
+                if self.user_data_path:
+                    user_dir = Path(self.user_data_path)
+                else:
+                    plugin_dir = Path(__file__).parent
+                    user_dir = plugin_dir / 'database' / 'user_annotations'
                 provider = UserAnnotationProvider(str(user_dir))
                 tool = info.get('tool')
                 if tool:
@@ -592,8 +598,11 @@ class MotifVisualizerGUI:
             from .database.user_annotations import UserAnnotationProvider
             
             # Initialize user annotation provider
-            plugin_dir = Path(__file__).parent
-            user_annotations_dir = plugin_dir / 'database' / 'user_annotations'
+            if self.user_data_path:
+                user_annotations_dir = Path(self.user_data_path)
+            else:
+                plugin_dir = Path(__file__).parent
+                user_annotations_dir = plugin_dir / 'database' / 'user_annotations'
             provider = UserAnnotationProvider(str(user_annotations_dir))
             
             # SET ACTIVE TOOL FILTER BEFORE LOADING!
@@ -1129,7 +1138,7 @@ class MotifVisualizerGUI:
                 
                 # Format: ID | Source Name | Command
                 source_name = info.get('name', 'Unknown')
-                cmd_str = f"rmv_source {source_id}"
+                cmd_str = f"rmv_db {source_id}"
                 if info.get('supports_filtering'):
                     cmd_str += " [on|off|custom]" 
                 
@@ -1140,23 +1149,23 @@ class MotifVisualizerGUI:
             print("="*80)
             print("""
     Basic Usage:
-      rmv_source 1                     Select RNA 3D Atlas
-      rmv_source 3                     Select BGSU RNA 3D Hub API
-      rmv_source 6                     Select RNAMotifScan (RMS)
+      rmv_db 1                         Select RNA 3D Atlas
+      rmv_db 3                         Select BGSU RNA 3D Hub API
+      rmv_db 6                         Select RNAMotifScan (RMS)
     
-    Multi-Source Combine (NEW):
-      rmv_source 1 3                   Combine Atlas + BGSU (Atlas = priority)
-      rmv_source 2 5 3                 Combine 3 sources (Rfam = highest priority)
+    Multi-Source Combine:
+      rmv_db 1 3                       Combine Atlas + BGSU (Atlas = priority)
+      rmv_db 2 5 3                     Combine 3 sources (Rfam = highest priority)
       -> Includes homolog enrichment & cascade merge
     
     With Filtering Control (RMS/RMSX):
-      rmv_source 6 off                 Show all motifs (no filtering)
-      rmv_source 7 on                  Apply default P-value cutoffs
-      rmv_source 6 C-LOOP 0.05 KINK-TURN 0.02   Custom P-values
+      rmv_db 6 off                     Show all motifs (no filtering)
+      rmv_db 7 on                      Apply default P-value cutoffs
+      rmv_db 6 C-LOOP 0.05 KINK-TURN 0.02   Custom P-values
     
     Combine with P-values (2-step workflow):
-      Step 1: rmv_source 6 C-LOOP 0.05 KINK-TURN 0.02   Set P-values
-      Step 2: rmv_source 1 6           Combine Atlas + RMS (P-values apply)
+      Step 1: rmv_db 6 C-LOOP 0.05 KINK-TURN 0.02   Set P-values
+      Step 2: rmv_db 1 6               Combine Atlas + RMS (P-values apply)
     
     After selecting a source:
       rmv_fetch 1S72                   Load structure + motif data
@@ -1184,17 +1193,18 @@ class MotifVisualizerGUI:
         print("└" + "─"*78 + "┘\n")
         
         print("┌" + "─"*78 + "┐")
-        print("│  🔧 SOURCE SELECTION                                                    │")
+        print("│  🔧 DATABASE SELECTION                                                  │")
         print("├" + "─"*78 + "┤")
-        print("│  rmv_source <N>            Set motif data source by ID (1-7)             │")
-        print("│  rmv_source <N> <N>        Combine multiple sources (e.g., 1 3)         │")
+        print("│  rmv_db <N>                Select motif data source by ID (1-7)          │")
+        print("│  rmv_db <N> <N>            Combine multiple sources (e.g., 1 3)         │")
+        print("│  rmv_db <N> /path/to/data  Use custom data path (sources 5-7)           │")
         print("│  rmv_sources               List all available data sources              │")
         print("├" + "─"*78 + "┤")
         print("│  📥 LOADING & DATA                                                      │")
         print("├" + "─"*78 + "┤")
         print("│  rmv_fetch <PDB_ID>        Load PDB structure (no motif data)            │")
         print("│  rmv_fetch <ID> cif_use_auth=0  Load with label_asym_id chains          │")
-        print("│  rmv_motifs                Fetch motif data from selected source         │")
+        print("│  rmv_load_motif            Fetch motif data from selected source         │")
         print("│  rmv_load <PDB_ID>         Load structure with motif visualization      │")
         print("│  rmv_refresh               Force refresh cache and collect again       │")
         print("├" + "─"*78 + "┤")
@@ -1224,8 +1234,8 @@ class MotifVisualizerGUI:
         print("│  rmv_summary               Show all motif types & counts                 │")
         print("│  rmv_summary <TYPE>        Show instances of specific type               │")
         print("│  rmv_summary <TYPE> <NO>   Show specific instance details                │")
-        print("│  rmv_source                Show currently selected source                 │")
-        print("│  rmv_source info <N>       Show detailed info about a source              │")
+        print("│  rmv_source info           Show currently selected source                 │")
+        print("│  rmv_source info <N>       Show detailed info about source N              │")
         print("│  rmv_chains [structure]    Show chain ID diagnostics (auth/label mapping)│")
         print("│  rmv_reset                 Reset plugin: delete all objects & clear state │")
         print("│  rmv_help                  Show this command reference                   │")
@@ -1233,36 +1243,36 @@ class MotifVisualizerGUI:
         print("│  📁 USER ANNOTATIONS                                                    │")
         print("├" + "─"*78 + "┤")
         print("│  rmv_user <TOOL> <PDB_ID>  Load FR3D/RMS/RMSX annotations directly       │")
-        print("│  rmv_source 6 off          Disable RMS P-value filtering                │")
-        print("│  rmv_source 6 on           Enable RMS P-value filtering                 │")
-        print("│  rmv_source 6 MOTIF 0.01   Set custom P-value threshold for motif       │")
+        print("│  rmv_db 6 off              Disable RMS P-value filtering                │")
+        print("│  rmv_db 6 on               Enable RMS P-value filtering                 │")
+        print("│  rmv_db 6 MOTIF 0.01       Set custom P-value threshold for motif       │")
         print("└" + "─"*78 + "┘")
         
         print("\n  QUICK EXAMPLES:")
         print("  ───────────────")
         print("  1. Standard workflow (recommended):")
         print("     rmv_fetch 1S72            # Load PDB structure")
-        print("     rmv_source 3              # Select BGSU API")
-        print("     rmv_motifs                # Fetch motif data")
+        print("     rmv_db 3                  # Select BGSU API")
+        print("     rmv_load_motif            # Fetch motif data")
         print("     rmv_summary               # View summary")
         print("     rmv_show HL               # Render hairpin loops")
         print()
         print("  2. Switch sources (no re-download):")
-        print("     rmv_source 7              # Switch to RMSX")
-        print("     rmv_motifs                # Fetch RMSX data (same PDB)")
+        print("     rmv_db 7                  # Switch to RMSX")
+        print("     rmv_load_motif            # Fetch RMSX data (same PDB)")
         print("     rmv_show SARCIN-RICIN     # View RMSX sarcin-ricin motifs")
         print()
         print("  3. Multi-source compare:")
-        print("     rmv_source 3")
-        print("     rmv_motifs                # BGSU motifs → SARCIN_RICIN_ALL_S3")
-        print("     rmv_source 7")
-        print("     rmv_motifs                # RMSX motifs → SARCIN_RICIN_ALL_S7")
+        print("     rmv_db 3")
+        print("     rmv_load_motif            # BGSU motifs → SARCIN_RICIN_ALL_S3")
+        print("     rmv_db 7")
+        print("     rmv_load_motif            # RMSX motifs → SARCIN_RICIN_ALL_S7")
         print("     align SARCIN_RICIN_3_S3, SARCIN_RICIN_3_S7")
         print()
         print("  4. Label chain ID mode:")
         print("     rmv_fetch 1S72 cif_use_auth=0    # Load with label_asym_id")
-        print("     rmv_source 7")
-        print("     rmv_motifs                        # Chains shown as AA, BA, etc.")
+        print("     rmv_db 7")
+        print("     rmv_load_motif                    # Chains shown as AA, BA, etc.")
         print()
         print("  5. Save specific instance:")
         print("     rmv_save HL 1              Save hairpin loop instance #1")
@@ -1446,7 +1456,7 @@ class MotifVisualizerGUI:
                 self.logger.error(f"Invalid source mode '{mode}'.")
                 self.logger.info("Valid source modes:")
                 for m in valid_modes:
-                    self.logger.info(f"  rmv_source {m}")
+                    self.logger.info(f"  rmv_db {m}")
                 return
             
             config = get_config()
@@ -1464,10 +1474,10 @@ class MotifVisualizerGUI:
             # Print follow-up suggestions
             print("\n  Next steps:")
             if self.loaded_pdb_id:
-                print(f"    rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+                print(f"    rmv_load_motif             Fetch motif data for {self.loaded_pdb_id}")
             else:
                 print(f"    rmv_fetch <PDB_ID>         Load PDB structure")
-                print(f"    rmv_motifs                 Fetch motif data")
+                print(f"    rmv_load_motif             Fetch motif data")
             print()
             
         except Exception as e:
@@ -1482,7 +1492,7 @@ class MotifVisualizerGUI:
         print("  1. fr3d           - FR3D output format (BGSU base pairs)")
         print("  2. rnamotifscan   - RNAMotifScan output format (RMS)")
         print("  3. rnamotifscanx  - RNAMotifScanX output format (RMSX)")
-        print("\nAfter selecting a tool with rmv_source user <TOOL>,")
+        print("\nAfter selecting a tool with rmv_db user <TOOL>,")
         print("use rmv_fetch to load structures:")
         print("\nUsage:")
         print("  rmv_fetch <PDB_ID>")
@@ -1522,7 +1532,7 @@ class MotifVisualizerGUI:
         """Handle source selection by ID number with support for custom P-values.
         
         Also detects multi-source mode when extra_args contains additional
-        numeric source IDs (e.g., 'rmv_source 1 3' or 'rmv_source 2 5 3').
+        numeric source IDs (e.g., 'rmv_db 1 3' or 'rmv_db 2 5 3').
         
         Args:
             source_id (int): Source ID (1-7)
@@ -1541,8 +1551,8 @@ class MotifVisualizerGUI:
         
         # --- Multi-source detection ---
         # If extra_args contains ONLY numeric source IDs, enter combine mode.
-        # e.g., rmv_source 1 3 -> source_id=1, extra_args='3'
-        # e.g., rmv_source 2 5 3 -> source_id=2, extra_args='5 3'
+        # e.g., rmv_db 1 3 -> source_id=1, extra_args='3'
+        # e.g., rmv_db 2 5 3 -> source_id=2, extra_args='5 3'
         if extra_args:
             extra_parts = str(extra_args).strip().split()
             all_numeric = all(p.isdigit() for p in extra_parts)
@@ -1583,8 +1593,8 @@ class MotifVisualizerGUI:
         """Handle multi-source combine mode.
         
         Called when user provides multiple source IDs:
-            rmv_source 1 3     -> source_ids=[1, 3]
-            rmv_source 2 5 3   -> source_ids=[2, 5, 3]
+            rmv_db 1 3     -> source_ids=[1, 3]
+            rmv_db 2 5 3   -> source_ids=[2, 5, 3]
         
         Priority order = left to right (first = highest priority).
         
@@ -1630,11 +1640,11 @@ class MotifVisualizerGUI:
         
         self.logger.info("")
         self.logger.info("Features: Homolog enrichment + Cascade merge")
-        self.logger.info("Tip: Configure P-values first with 'rmv_source 6 MOTIF 0.05', then combine.")
+        self.logger.info("Tip: Configure P-values first with 'rmv_db 6 MOTIF 0.05', then combine.")
         if self.loaded_pdb_id:
-            self.logger.info(f"Use 'rmv_motifs' to load, enrich, and merge data for {self.loaded_pdb_id}")
+            self.logger.info(f"Use 'rmv_load_motif' to load, enrich, and merge data for {self.loaded_pdb_id}")
         else:
-            self.logger.info("Use 'rmv_fetch <PDB_ID>' to load structure, then 'rmv_motifs' for data")
+            self.logger.info("Use 'rmv_fetch <PDB_ID>' to load structure, then 'rmv_load_motif' for data")
     
     def _handle_local_source_by_id(self, source_id: int, source_info: Dict, extra_args: str = None):
         """Handle local source selection by ID."""
@@ -1666,12 +1676,10 @@ class MotifVisualizerGUI:
         
         self.logger.info("\nNext steps:")
         if self.loaded_pdb_id:
-            self.logger.info(f"  rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+            self.logger.info(f"  rmv_load_motif             Fetch motif data for {self.loaded_pdb_id}")
         else:
             self.logger.info("  rmv_fetch <PDB_ID>         Load PDB structure")
-            self.logger.info("  rmv_motifs                 Fetch motif data")
-        self.logger.info("  rmv_summary                Show available motifs")
-        self.logger.info("  rmv_show <MOTIF_TYPE>      Render motif on structure")
+            self.logger.info("  rmv_load_motif             Fetch motif data")
     
     def _handle_web_source_by_id(self, source_id: int, source_info: Dict, extra_args: str = None):
         """Handle online source selection by ID."""
@@ -1710,21 +1718,22 @@ class MotifVisualizerGUI:
         
         self.logger.info("\nNext steps:")
         if self.loaded_pdb_id:
-            self.logger.info(f"  rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+            self.logger.info(f"  rmv_load_motif             Fetch motif data for {self.loaded_pdb_id}")
         else:
             self.logger.info("  rmv_fetch <PDB_ID>         Load PDB structure")
-            self.logger.info("  rmv_motifs                 Fetch motif data")
-        self.logger.info("  rmv_summary                Show available motifs")
-        self.logger.info("  rmv_show <MOTIF_TYPE>      Render motif on structure")
+            self.logger.info("  rmv_load_motif             Fetch motif data")
     
     def _handle_user_source_by_id(self, source_id: int, source_info: Dict, extra_args: str = None):
         """Handle user annotation source selection by ID.
         
         Supports:
-        - rmv_source 6          (RMS with default filtering ON)
-        - rmv_source 6 off      (RMS with filtering OFF)
-        - rmv_source 6 on       (RMS with filtering ON - explicit)
-        - rmv_source 6 C-LOOP 0.05 KINK-TURN 0.02  (RMS with custom P-values)
+        - rmv_db 6              (RMS with default filtering ON)
+        - rmv_db 6 off          (RMS with filtering OFF)
+        - rmv_db 6 on           (RMS with filtering ON - explicit)
+        - rmv_db 6 C-LOOP 0.05 KINK-TURN 0.02  (RMS with custom P-values)
+        - rmv_db 5 /path/to/data   (FR3D with custom data directory)
+        - rmv_db 6 /path/to/data   (RMS with custom data directory)
+        - rmv_db 7 /path/to/data   (RMSX with custom data directory)
         """
         tool = source_info.get('tool')
         
@@ -1737,6 +1746,7 @@ class MotifVisualizerGUI:
         self.current_local_source = None
         self.current_web_source = None
         self.combined_source_ids = []
+        self.user_data_path = None  # Reset custom path
         
         # BUG FIX: Clear specific_source for user annotation sources (they use tool-based loading)
         from .database import get_config
@@ -1748,29 +1758,42 @@ class MotifVisualizerGUI:
         filtering_enabled = True  # Default: ON
         
         if extra_args:
-            parts = str(extra_args).strip().split()
+            extra_str = str(extra_args).strip()
             
-            # Check if first arg is on/off
-            if len(parts) > 0 and parts[0].lower() in ['on', 'off']:
-                filtering_enabled = (parts[0].lower() == 'on')
-                parts = parts[1:]  # Remove the on/off argument
-            
-            # Parse remaining arguments as custom P-values (MOTIF_NAME p_value pairs)
-            if len(parts) > 0:
-                # Check if this looks like P-value arguments
-                i = 0
-                while i < len(parts):
-                    if i + 1 < len(parts):
-                        try:
-                            pvalue = float(parts[i + 1])
-                            motif_name = parts[i].upper()
-                            custom_pvalues[motif_name] = pvalue
-                            i += 2
-                        except ValueError:
-                            # Not a float, skip this pair
+            # Check if the argument looks like a file path
+            import os
+            if extra_str.startswith('/') or extra_str.startswith('~') or \
+               extra_str.startswith('./') or extra_str.startswith('..'):
+                # Expand user home directory
+                expanded_path = os.path.expanduser(extra_str)
+                if os.path.isdir(expanded_path):
+                    self.user_data_path = expanded_path
+                    self.logger.success(f"Custom data path set: {expanded_path}")
+                else:
+                    self.logger.warning(f"Path not found: {expanded_path}")
+                    self.logger.warning("Will use default data directory instead")
+            else:
+                parts = extra_str.split()
+                
+                # Check if first arg is on/off
+                if len(parts) > 0 and parts[0].lower() in ['on', 'off']:
+                    filtering_enabled = (parts[0].lower() == 'on')
+                    parts = parts[1:]  # Remove the on/off argument
+                
+                # Parse remaining arguments as custom P-values (MOTIF_NAME p_value pairs)
+                if len(parts) > 0:
+                    i = 0
+                    while i < len(parts):
+                        if i + 1 < len(parts):
+                            try:
+                                pvalue = float(parts[i + 1])
+                                motif_name = parts[i].upper()
+                                custom_pvalues[motif_name] = pvalue
+                                i += 2
+                            except ValueError:
+                                i += 1
+                        else:
                             i += 1
-                    else:
-                        i += 1
         
         # Store filtering state and custom P-values
         if tool in ['rms', 'rnamotifscan']:
@@ -1791,26 +1814,26 @@ class MotifVisualizerGUI:
                 status_msg += f" | {filter_status}"
         
         self.logger.success(status_msg)
+        if self.user_data_path:
+            self.logger.info(f"  Data path: {self.user_data_path}")
         
         self.logger.info("\nNext steps:")
         if self.loaded_pdb_id:
-            self.logger.info(f"  rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+            self.logger.info(f"  rmv_load_motif             Fetch motif data for {self.loaded_pdb_id}")
         else:
             self.logger.info("  rmv_fetch <PDB_ID>         Load PDB structure")
-            self.logger.info("  rmv_motifs                 Fetch motif data")
-        self.logger.info("  rmv_summary                Show available motifs")
-        self.logger.info("  rmv_show <MOTIF_TYPE>      Render motif on structure")
+            self.logger.info("  rmv_load_motif             Fetch motif data")
     
     def _handle_source_info_command(self, source_id_str: str = None):
-        """Display comprehensive information about a source.
+        """Display information about the active source, or detailed info about a specific source.
         
         Usage:
-            rmv_source info 1  - Show detailed info about source 1
-            rmv_source info    - Show info for all sources
+            rmv_source info      - Show currently active source
+            rmv_source info <N>  - Show detailed info about source N
         """
         if not source_id_str:
-            # Show info for all sources
-            self._print_all_source_info()
+            # Show currently active source only
+            self._print_active_source_info()
             return
         
         try:
@@ -1818,7 +1841,74 @@ class MotifVisualizerGUI:
             self._print_single_source_info(source_id)
         except ValueError:
             self.logger.error(f"Invalid source ID: {source_id_str}")
-            self.logger.error("Usage: rmv_source info <ID> or rmv_sources")
+            self.logger.error("Usage: rmv_source info [<ID>] or rmv_sources")
+    
+    def _print_active_source_info(self):
+        """Print info about the currently active source only."""
+        if self.current_source_id is None or self.current_source_mode is None:
+            self.logger.info("No source is currently active.")
+            self.logger.info("")
+            self.logger.info("Select a source first:")
+            self.logger.info("  rmv_db <N>       Select source (1-7)")
+            self.logger.info("  rmv_sources      List all available sources")
+            return
+        
+        # Handle combine mode (multiple sources)
+        if self.current_source_mode == 'combine' and self.combined_source_ids:
+            print("\n" + "=" * 60)
+            print("  ACTIVE SOURCE: COMBINED MODE")
+            print("=" * 60)
+            print(f"\n  Sources combined: {', '.join(str(s) for s in self.combined_source_ids)}")
+            for sid in self.combined_source_ids:
+                if sid in SOURCE_ID_MAP:
+                    info = SOURCE_ID_MAP[sid]
+                    print(f"    [{sid}] {info['name']:30} | {info['coverage']}")
+            print(f"\n  Mode:     combine")
+            if self.loaded_pdb_id:
+                print(f"  PDB:      {self.loaded_pdb_id}")
+            print("\n" + "=" * 60 + "\n")
+            return
+        
+        # Single source mode — determine source ID
+        try:
+            source_id = int(self.current_source_id)
+        except (ValueError, TypeError):
+            source_id = None
+        
+        if source_id and source_id in SOURCE_ID_MAP:
+            info = SOURCE_ID_MAP[source_id]
+            
+            print("\n" + "=" * 60)
+            print(f"  ACTIVE SOURCE: [{source_id}] {info['name'].upper()}")
+            print("=" * 60)
+            print(f"\n  Description:  {info['description']}")
+            print(f"  Category:     {info.get('category', 'N/A')}")
+            print(f"  Coverage:     {info['coverage']}")
+            print(f"  Type:         {info['type'].upper()}")
+            
+            if self.loaded_pdb_id:
+                print(f"  PDB loaded:   {self.loaded_pdb_id}")
+            
+            # Show filtering status for RMS/RMSX
+            if source_id == 6:
+                status = "ON" if self.user_rms_filtering_enabled else "OFF"
+                print(f"  Filtering:    {status}")
+                if self.user_rms_custom_pvalues:
+                    print(f"  Custom P-values: {self.user_rms_custom_pvalues}")
+            elif source_id == 7:
+                status = "ON" if self.user_rmsx_filtering_enabled else "OFF"
+                print(f"  Filtering:    {status}")
+                if self.user_rmsx_custom_pvalues:
+                    print(f"  Custom P-values: {self.user_rmsx_custom_pvalues}")
+            
+            # Show custom data path if set
+            if hasattr(self, 'user_data_path') and self.user_data_path and source_id in (5, 6, 7):
+                print(f"  Data path:    {self.user_data_path}")
+            
+            print("\n" + "=" * 60 + "\n")
+        else:
+            self.logger.info(f"Active source mode: {self.current_source_mode}")
+            self.logger.info(f"Source ID: {self.current_source_id}")
     
     def _print_single_source_info(self, source_id: int):
         """Print detailed information about a single source."""
@@ -1844,18 +1934,19 @@ class MotifVisualizerGUI:
         
         # Display sample commands
         print(f"\nSample commands:")
-        print(f"  rmv_source {source_id}           Select this source")
+        print(f"  rmv_db {source_id}                 Select this source")
         print(f"  rmv_fetch 1S72                  Load structure")
+        print(f"  rmv_load_motif                  Fetch motif data")
         print(f"  rmv_summary                     Show available motifs")
         print(f"  rmv_show HL                     Render motif")
         
         # RMS/RMSX specific features
         if info.get('supports_filtering'):
             print(f"\nWith filtering control:")
-            print(f"  rmv_source {source_id} off        Disable filtering (show all motifs)")
-            print(f"  rmv_source {source_id} on         Enable filtering (default)")
+            print(f"  rmv_db {source_id} off              Disable filtering (show all motifs)")
+            print(f"  rmv_db {source_id} on               Enable filtering (default)")
             print(f"\nWith custom P-values:")
-            print(f"  rmv_source {source_id} C-LOOP 0.05 KINK-TURN 0.02")
+            print(f"  rmv_db {source_id} C-LOOP 0.05 KINK-TURN 0.02")
             print(f"    → Apply custom thresholds for specific motif types")
             print(f"    → Other motif types use default thresholds")
         
@@ -1880,7 +1971,7 @@ class MotifVisualizerGUI:
         
         print("\n" + "="*70)
         print("Usage:")
-        print("  rmv_source <ID>                Select source by ID")
+        print("  rmv_db <ID>                    Select source by ID")
         print("  rmv_source info <ID>           Show detailed info")
         print("  rmv_sources                    List all sources (this display)")
         print("="*70 + "\n")
@@ -1888,11 +1979,11 @@ class MotifVisualizerGUI:
     def _handle_user_source(self, tool_name):
         """Handle user annotations source selection."""
         if not tool_name:
-            self.logger.error("Usage: rmv_source user <tool_name> [on|off]")
+            self.logger.error("Usage: rmv_db user <tool_name> [on|off]")
             self.logger.error("Available tools:")
-            self.logger.error("  rmv_source user fr3d")
-            self.logger.error("  rmv_source user rms [on|off]          (default: on)")
-            self.logger.error("  rmv_source user rmsx [on|off]         (default: on)")
+            self.logger.error("  rmv_db user fr3d")
+            self.logger.error("  rmv_db user rms [on|off]          (default: on)")
+            self.logger.error("  rmv_db user rmsx [on|off]         (default: on)")
             return
         
         # Parse tool name and optional on/off parameter
@@ -1944,12 +2035,10 @@ class MotifVisualizerGUI:
         self.logger.info("")
         self.logger.info("Next steps:")
         if self.loaded_pdb_id:
-            self.logger.info(f"  rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+            self.logger.info(f"  rmv_load_motif             Fetch motif data for {self.loaded_pdb_id}")
         else:
             self.logger.info("  rmv_fetch <PDB_ID>         Load PDB structure")
-            self.logger.info("  rmv_motifs                 Fetch motif data")
-        self.logger.info("  rmv_summary                Show available motifs")
-        self.logger.info("  rmv_show <MOTIF_TYPE>      Render motif on structure")
+            self.logger.info("  rmv_load_motif             Fetch motif data")
         self.logger.info("")
     
     def _handle_local_source(self, source_name):
@@ -2021,8 +2110,8 @@ class MotifVisualizerGUI:
             source_ids_str: Space-separated source IDs (e.g., "1 3" or "2 5")
         """
         if not source_ids_str:
-            self.logger.error("Usage: rmv_source combine <ID1> <ID2> [<ID3> ...]")
-            self.logger.error("Example: rmv_source combine 1 3    (combine Atlas + BGSU)")
+            self.logger.error("Usage: rmv_db combine <ID1> <ID2> [<ID3> ...]")
+            self.logger.error("Example: rmv_db combine 1 3    (combine Atlas + BGSU)")
             self.logger.error("Valid source IDs:")
             self.logger.error("  1 = RNA 3D Atlas (Local)")
             self.logger.error("  2 = Rfam (Local)")
@@ -2097,7 +2186,7 @@ class MotifVisualizerGUI:
             
             # Determine which source(s) to refresh from
             if not self.current_source_mode:
-                self.logger.error("No source selected. Use rmv_source <N> first.")
+                self.logger.error("No source selected. Use rmv_db <N> first.")
                 return
             
             # Describe what we're refreshing
@@ -2125,7 +2214,7 @@ class MotifVisualizerGUI:
                 except Exception:
                     pass  # Cache clearing is best-effort
             
-            # Re-run the same fetch pipeline that rmv_motifs uses
+            # Re-run the same fetch pipeline that rmv_load_motif uses
             self.fetch_motif_data_action(pdb_id)
             
             self.logger.success(f"Refresh complete for {pdb_id} from {source_desc}")
@@ -2150,7 +2239,7 @@ class MotifVisualizerGUI:
                 total_instances = sum(len(info.get('motif_details', [])) for info in loaded_motifs.values())
                 print(f"  Motifs: {len(loaded_motifs)} types, {total_instances} total instances")
             else:
-                print(f"  Motifs: None loaded (run rmv_motifs)")
+                print(f"  Motifs: None loaded (run rmv_load_motif)")
         else:
             print(f"\n  Loaded PDB: None (run rmv_fetch <PDB_ID>)")
         
@@ -2207,14 +2296,14 @@ class MotifVisualizerGUI:
             
         else:
             print(f"  Source: None selected")
-            print(f"  Run: rmv_source <N>    (1-7)")
+            print(f"  Run: rmv_db <N>    (1-7)")
         
         # Always show workflow steps
         print("\n" + "-"*70)
         print("  ⚡ WORKFLOW:")
         print("     Step 1: rmv_fetch <PDB_ID>       # Load PDB structure")
-        print("     Step 2: rmv_source <N>            # Select data source (1-7)")
-        print("     Step 3: rmv_motifs                # Fetch motif data")
+        print("     Step 2: rmv_db <N>               # Select data source (1-7)")
+        print("     Step 3: rmv_load_motif            # Fetch motif data")
         print("-"*70)
         print("  📋 AVAILABLE SOURCES:")
         print("     [1] RNA 3D Atlas   [2] Rfam          (offline)")
@@ -2246,7 +2335,7 @@ def initialize_gui():
         """PyMOL command: Load raw PDB structure only (no motif data).
         
         Downloads and loads the PDB/mmCIF structure into PyMOL.
-        Use rmv_source + rmv_motifs after to select source and fetch motif data.
+        Use rmv_db + rmv_load_motif after to select source and fetch motif data.
         
         Usage:
             rmv_fetch 1S72                           # Load PDB structure
@@ -2372,9 +2461,9 @@ def initialize_gui():
             gui.logger.info("")
             gui.logger.info("Next steps:")
             if gui.current_source_mode:
-                gui.logger.info("  rmv_motifs                 Fetch motif data from current source")
+                gui.logger.info("  rmv_load_motif             Fetch motif data from current source")
             else:
-                gui.logger.info("  rmv_source <N>             Select a motif data source (1-7)")
+                gui.logger.info("  rmv_db <N>                 Select a motif data source (1-7)")
             gui.logger.info("  rmv_sources                List all available sources")
             gui.logger.info("")
             
@@ -2386,15 +2475,15 @@ def initialize_gui():
         
         Requires:
             1. A PDB structure must be loaded first (rmv_fetch)
-            2. A source must be selected (rmv_source)
+            2. A source must be selected (rmv_db)
         
         Usage:
-            rmv_motifs                   Fetch motifs from current source
+            rmv_load_motif               Fetch motifs from current source
         
         Workflow:
             rmv_fetch 1S72               # Step 1: Load PDB structure
-            rmv_source 3                 # Step 2: Select BGSU API
-            rmv_motifs                   # Step 3: Fetch motif data
+            rmv_db 3                     # Step 2: Select BGSU API
+            rmv_load_motif               # Step 3: Fetch motif data
             rmv_summary                  # Step 4: View summary
         """
         # Check: PDB must be loaded first
@@ -2409,8 +2498,8 @@ def initialize_gui():
         if not gui.current_source_mode:
             gui.logger.error("No source selected.")
             gui.logger.info("Select a source first:")
-            gui.logger.info("  rmv_source <N>             (1-7)")
-            gui.logger.info("  Example: rmv_source 3      (BGSU API)")
+            gui.logger.info("  rmv_db <N>                 (1-7)")
+            gui.logger.info("  Example: rmv_db 3          (BGSU API)")
             gui.logger.info("  rmv_sources                (list all)")
             return
         
@@ -2517,36 +2606,37 @@ def initialize_gui():
                     # Show all instances of the motif type
                     gui.show_motif_summary_for_type(motif_arg)
     
-    def set_source(mode='', tool=''):
-        """PyMOL command: Set motif data source mode using source ID numbers.
+    def select_database(mode='', tool=''):
+        """PyMOL command: Select motif data source by ID number.
         
-        NEW ID-BASED SYNTAX (Primary - use this):
-            rmv_source 1              - RNA 3D Atlas (Local)
-            rmv_source 2              - Rfam (Local)
-            rmv_source 3              - BGSU RNA 3D Hub (Online)
-            rmv_source 4              - Rfam API (Online)
-            rmv_source 5              - FR3D Annotations (User)
-            rmv_source 6              - RNAMotifScan (RMS - User)
-            rmv_source 7              - RNAMotifScanX (RMSX - User)
+        Usage:
+            rmv_db 1                  - RNA 3D Atlas (Local)
+            rmv_db 2                  - Rfam (Local)
+            rmv_db 3                  - BGSU RNA 3D Hub (Online)
+            rmv_db 4                  - Rfam API (Online)
+            rmv_db 5                  - FR3D Annotations (User)
+            rmv_db 6                  - RNAMotifScan (RMS - User)
+            rmv_db 7                  - RNAMotifScanX (RMSX - User)
         
         Multi-Source Combine (with enrichment + cascade merge):
-            rmv_source 1 3            - Combine Atlas + BGSU (Atlas = priority)
-            rmv_source 2 5 3          - Combine 3 sources (Rfam = highest priority)
+            rmv_db 1 3               - Combine Atlas + BGSU (Atlas = priority)
+            rmv_db 2 5 3             - Combine 3 sources (Rfam = highest priority)
         
         With optional parameters:
-            rmv_source 6 off                       - RMS with filtering OFF
-            rmv_source 6 on                        - RMS with filtering ON
-            rmv_source 6 C-LOOP 0.05 KINK-TURN 0.02 - RMS with custom P-values
-            rmv_source 7 C-LOOP_CONSENSUS 0.01    - RMSX with custom P-value
+            rmv_db 6 off                       - RMS with filtering OFF
+            rmv_db 6 on                        - RMS with filtering ON
+            rmv_db 6 C-LOOP 0.05 KINK-TURN 0.02 - RMS with custom P-values
+            rmv_db 7 C-LOOP_CONSENSUS 0.01    - RMSX with custom P-value
         
-        Info command:
-            rmv_source info 1         - Show detailed info about source 1
-        
-        Show all sources:
-            rmv_sources               - List all available sources with IDs
+        With custom data path (sources 5-7):
+            rmv_db 5 /path/to/fr3d/data       - FR3D with custom data directory
+            rmv_db 6 /path/to/rms/data        - RMS with custom data directory
+            rmv_db 7 /path/to/rmsx/data       - RMSX with custom data directory
         """
         if not mode:
-            gui.print_source_info()
+            gui.logger.error("Usage: rmv_db <SOURCE_ID> [options]")
+            gui.logger.error("Use 'rmv_sources' to list all available sources")
+            gui.logger.error("Use 'rmv_source info' to see current source info")
             return
         
         mode_arg = str(mode).strip()
@@ -2556,11 +2646,6 @@ def initialize_gui():
         parts = mode_arg.split(None, 1)  # Split on first whitespace
         first_part = parts[0].lower()
         remaining_arg = parts[1] if len(parts) > 1 else tool_arg
-        
-        # Check if first argument is "info" command
-        if first_part == 'info':
-            gui._handle_source_info_command(remaining_arg)
-            return
         
         # Check if first argument is a number (source ID)
         try:
@@ -2582,6 +2667,36 @@ def initialize_gui():
         else:
             # Old-style: auto, all, etc.
             gui.set_source_mode(first_part)
+    
+    def set_source(mode='', source_id=''):
+        """PyMOL command: Show current source info or detailed info about a specific source.
+        
+        Usage:
+            rmv_source info          - Show currently selected source info
+            rmv_source info <N>      - Show detailed info about source N (1-7)
+        """
+        if not mode:
+            gui.logger.error("Usage: rmv_source info [<ID>]")
+            gui.logger.error("  rmv_source info        Show current source info")
+            gui.logger.error("  rmv_source info <N>    Show detailed info about source N")
+            gui.logger.error("  rmv_db <N>             Select a source")
+            return
+        
+        mode_arg = str(mode).strip()
+        tool_arg = str(source_id).strip() if source_id else None
+        
+        # Handle PyMOL passing arguments as combined string
+        parts = mode_arg.split(None, 1)
+        first_part = parts[0].lower()
+        remaining_arg = parts[1] if len(parts) > 1 else tool_arg
+        
+        if first_part == 'info':
+            gui._handle_source_info_command(remaining_arg)
+            return
+        
+        gui.logger.error(f"Unknown subcommand: {first_part}")
+        gui.logger.error("Usage: rmv_source info [<ID>]")
+        gui.logger.error("       rmv_db <ID>        - Select a source")
     
     def refresh_motifs(pdb_id=''):
         """PyMOL command: Force refresh cache and collect motif data again.
@@ -2724,13 +2839,14 @@ def initialize_gui():
     
     # Add commands to PyMOL
     cmd.extend('rmv_fetch', fetch_raw_pdb)
-    cmd.extend('rmv_motifs', load_motif_data)
+    cmd.extend('rmv_load_motif', load_motif_data)
     cmd.extend('rmv_load', load_structure)
     cmd.extend('rmv_toggle', toggle_motif)
     cmd.extend('rmv_sources', list_sources)
     cmd.extend('rmv_help', show_help)
     cmd.extend('rmv_bg_color', set_bg_color)
     cmd.extend('rmv_summary', motif_summary)
+    cmd.extend('rmv_db', select_database)
     cmd.extend('rmv_source', set_source)
     cmd.extend('rmv_refresh', refresh_motifs)
     cmd.extend('rmv_show', show_motif)
@@ -3008,8 +3124,8 @@ def initialize_gui():
         print("  Ready for a fresh session.")
         print("\n  Quick Start:")
         print("     rmv_fetch <PDB_ID>       # Load a PDB structure")
-        print("     rmv_source <N>            # Select data source (1-7)")
-        print("     rmv_motifs                # Fetch motif data")
+        print("     rmv_db <N>                # Select data source (1-7)")
+        print("     rmv_load_motif            # Fetch motif data")
         print()
     
     cmd.extend('rmv_reset', reset_plugin)
@@ -3018,8 +3134,8 @@ def initialize_gui():
     gui.logger.info("")
     gui.logger.info("Quick Start:")
     gui.logger.info("  rmv_fetch 1S72              Load PDB structure")
-    gui.logger.info("  rmv_source 3                Select BGSU API (3000+ structures)")
-    gui.logger.info("  rmv_motifs                  Fetch motif data from source")
+    gui.logger.info("  rmv_db 3                    Select BGSU API (3000+ structures)")
+    gui.logger.info("  rmv_load_motif              Fetch motif data from source")
     gui.logger.info("  rmv_summary                 Show motif summary")
     gui.logger.info("  rmv_show HL                 Highlight and render hairpin loops")
     gui.logger.info("  rmv_show HL 1               Zoom to specific instance")

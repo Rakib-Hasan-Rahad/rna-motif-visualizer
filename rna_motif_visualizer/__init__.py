@@ -6,6 +6,7 @@ This package provides:
 - 7 data sources (Atlas, Rfam, BGSU API, Rfam API, FR3D, RMS, RMSX)
 - Multi-source combine with cascade merge
 - Label chain ID support (cif_use_auth=0)
+- Custom data path support for user annotation sources (FR3D, RMS, RMSX)
 - High-resolution image export with 8 representation options
 - 18 PyMOL commands (rmv_help for full reference)
 

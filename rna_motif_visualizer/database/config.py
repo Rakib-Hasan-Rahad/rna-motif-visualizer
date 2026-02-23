@@ -23,7 +23,7 @@ SOURCE_ID_MAP: Dict[int, Dict] = {
         'description': 'RNA 3D Motif Atlas (bundled, offline)',
         'coverage': '759 PDB structures',
         'mode': 'local',
-        'command': 'rmv_source 1',
+        'command': 'rmv_db 1',
     },
     2: {
         'name': 'Rfam',
@@ -33,7 +33,7 @@ SOURCE_ID_MAP: Dict[int, Dict] = {
         'description': 'Rfam Database (bundled, offline)',
         'coverage': '173 PDB structures',
         'mode': 'local',
-        'command': 'rmv_source 2',
+        'command': 'rmv_db 2',
     },
     3: {
         'name': 'BGSU RNA 3D Hub',
@@ -43,7 +43,7 @@ SOURCE_ID_MAP: Dict[int, Dict] = {
         'description': 'BGSU RNA 3D Hub API (online, requires internet)',
         'coverage': '~3000+ PDB structures',
         'mode': 'web',
-        'command': 'rmv_source 3',
+        'command': 'rmv_db 3',
     },
     4: {
         'name': 'Rfam API',
@@ -53,7 +53,7 @@ SOURCE_ID_MAP: Dict[int, Dict] = {
         'description': 'Rfam API (online, requires internet)',
         'coverage': 'All Rfam motifs',
         'mode': 'web',
-        'command': 'rmv_source 4',
+        'command': 'rmv_db 4',
     },
     5: {
         'name': 'FR3D Annotations',
@@ -63,7 +63,7 @@ SOURCE_ID_MAP: Dict[int, Dict] = {
         'description': 'FR3D analysis output (custom user files)',
         'coverage': 'Custom uploads',
         'mode': 'user',
-        'command': 'rmv_source 5',
+        'command': 'rmv_db 5',
     },
     6: {
         'name': 'RNAMotifScan (RMS)',
@@ -74,9 +74,9 @@ SOURCE_ID_MAP: Dict[int, Dict] = {
         'coverage': 'Custom uploads',
         'mode': 'user',
         'supports_filtering': True,
-        'command': 'rmv_source 6',
-        'command_with_filtering': 'rmv_source 6 [on|off]',
-        'command_with_custom_pvalues': 'rmv_source 6 MOTIF_NAME p_value ...',
+        'command': 'rmv_db 6',
+        'command_with_filtering': 'rmv_db 6 [on|off]',
+        'command_with_custom_pvalues': 'rmv_db 6 MOTIF_NAME p_value ...',
     },
     7: {
         'name': 'RNAMotifScanX (RMSX)',
@@ -87,9 +87,9 @@ SOURCE_ID_MAP: Dict[int, Dict] = {
         'coverage': 'Custom uploads',
         'mode': 'user',
         'supports_filtering': True,
-        'command': 'rmv_source 7',
-        'command_with_filtering': 'rmv_source 7 [on|off]',
-        'command_with_custom_pvalues': 'rmv_source 7 MOTIF_NAME p_value ...',
+        'command': 'rmv_db 7',
+        'command_with_filtering': 'rmv_db 7 [on|off]',
+        'command_with_custom_pvalues': 'rmv_db 7 MOTIF_NAME p_value ...',
     },
 }
 

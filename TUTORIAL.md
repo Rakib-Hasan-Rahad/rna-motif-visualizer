@@ -1,6 +1,6 @@
 # RNA Motif Visualizer — Tutorial
 
-A complete step-by-step guide for using the RNA Motif Visualizer PyMOL plugin (v2.3.0).
+A complete step-by-step guide for using the RNA Motif Visualizer PyMOL plugin.
 
 ---
 
@@ -9,14 +9,13 @@ A complete step-by-step guide for using the RNA Motif Visualizer PyMOL plugin (v
 1. [Getting Started](#1-getting-started)
 2. [Basic Workflow](#2-basic-workflow)
 3. [Exploring Motifs](#3-exploring-motifs)
-4. [Viewing Instances](#4-viewing-instances)
-5. [Working with Data Sources](#5-working-with-data-sources)
-6. [Multi-Source Comparison](#6-multi-source-comparison)
-7. [User Annotations (FR3D / RMS / RMSX)](#7-user-annotations-fr3d--rms--rmsx)
-8. [Customizing Colors](#8-customizing-colors)
-9. [Saving Images](#9-saving-images)
-10. [Label Chain IDs (Advanced)](#10-label-chain-ids-advanced)
-11. [Tips and Tricks](#11-tips-and-tricks)
+4. [Working with Data Sources](#4-working-with-data-sources)
+5. [Multi-Source Comparison](#5-multi-source-comparison)
+6. [User Annotations (FR3D / RMS / RMSX)](#6-user-annotations-fr3d--rms--rmsx)
+7. [Customizing Colors](#7-customizing-colors)
+8. [Saving Images](#8-saving-images)
+9. [Label Chain IDs (Advanced)](#9-label-chain-ids-advanced)
+10. [Tips and Tricks](#10-tips-and-tricks)
 
 ---
 
@@ -73,7 +72,7 @@ This downloads the structure from RCSB PDB and loads it into PyMOL:
 ### Step 2 — Select a Data Source
 
 ```
-rmv_source 3
+rmv_db 3
 ```
 
 This selects BGSU RNA 3D Hub API — the most comprehensive source with 3000+ structures. Available sources:
@@ -93,7 +92,7 @@ Run `rmv_sources` to see detailed information about each source.
 ### Step 3 — Fetch Motif Data
 
 ```
-rmv_motifs
+rmv_load_motif
 ```
 
 This retrieves motif data from the selected source for your loaded PDB:
@@ -125,7 +124,6 @@ Displays a table of all detected motif types and instance counts:
   GNRA                           23
   INTERNAL LOOP (IL)             19
   3-WAY JUNCTION (J3)            18
-  ...
 --------------------------------------------------
   TOTAL                         223
 ==================================================
@@ -143,8 +141,8 @@ This creates PyMOL objects, colors the hairpin loop residues, and displays them 
 
 ```
 rmv_fetch 1S72       # Load PDB
-rmv_source 3         # Select BGSU
-rmv_motifs           # Fetch data
+rmv_db 3             # Select BGSU
+rmv_load_motif       # Fetch data
 rmv_summary          # View summary
 rmv_show HL          # Render hairpin loops
 ```
@@ -165,11 +163,11 @@ Shows a detailed table of all instances of that motif type:
 ====================================================================
   SARCIN-RICIN MOTIF INSTANCES
 ====================================================================
-  NO.    CHAIN      RESIDUE RANGES           NUCLEOTIDES
+  NO.    CHAIN      RESIDUE RANGES
 --------------------------------------------------------------------
-  1      A          A:158-164, A:171-178     AGAACUGCUCAGUAU
-  2      A          A:210-216, A:224-229     UUAGUAAUGAACG
-  3      A          A:290-296, A:355-362     CCGACCGCCAGUACG
+  1      A          A:158-164, A:171-178
+  2      A          A:210-216, A:224-229
+  3      A          A:290-296, A:355-362
   ...
 --------------------------------------------------------------------
 ```
@@ -204,18 +202,18 @@ rmv_show ALL           # Show all motif types with objects
 
 
 
-## 3. Working with Data Sources
+## 4. Working with Data Sources
 
 ### Local Sources (Offline — No Internet Needed)
 
 Sources 1 and 2 are bundled with the plugin:
 
 ```
-rmv_source 1           # RNA 3D Atlas — 759 PDBs, motif types: HL, IL, J3-J7
-rmv_motifs
+rmv_db 1               # RNA 3D Atlas — 759 PDBs, motif types: HL, IL, J3-J7
+rmv_load_motif
 
-rmv_source 2           # Rfam — 173 PDBs, motif types: GNRA, UNCG, K-turn, T-loop, C-loop, etc.
-rmv_motifs
+rmv_db 2               # Rfam — 173 PDBs, motif types: GNRA, UNCG, K-turn, T-loop, C-loop, etc.
+rmv_load_motif
 ```
 
 ### Online Sources (API — Internet Required)
@@ -223,11 +221,11 @@ rmv_motifs
 Sources 3 and 4 query online databases:
 
 ```
-rmv_source 3           # BGSU RNA 3D Hub — ~3000+ PDBs (most comprehensive source)
-rmv_motifs
+rmv_db 3               # BGSU RNA 3D Hub — ~3000+ PDBs (most comprehensive source)
+rmv_load_motif
 
-rmv_source 4           # Rfam API — all Rfam-annotated motif families
-rmv_motifs
+rmv_db 4               # Rfam API — all Rfam-annotated motif families
+rmv_load_motif
 ```
 
 > **Caching:** API results are cached for 30 days in `~/.rna_motif_visualizer_cache/`. Use `rmv_refresh` to bypass the cache and force a fresh fetch.
@@ -238,14 +236,14 @@ One of the most useful features — the PDB structure stays loaded while you swi
 
 ```
 rmv_fetch 1S72         # Load once
-rmv_source 3           # BGSU
-rmv_motifs             # Fetch from BGSU → 41 motif types
+rmv_db 3               # BGSU
+rmv_load_motif         # Fetch from BGSU → 41 motif types
 
-rmv_source 1           # Switch to Atlas
-rmv_motifs             # Fetch from Atlas → 7 motif types (no PDB re-download)
+rmv_db 1               # Switch to Atlas
+rmv_load_motif         # Fetch from Atlas → 7 motif types (no PDB re-download)
 
-rmv_source 2           # Switch to Rfam
-rmv_motifs             # Fetch from Rfam
+rmv_db 2               # Switch to Rfam
+rmv_load_motif         # Fetch from Rfam
 ```
 
 ### Check Source Information
@@ -253,12 +251,12 @@ rmv_motifs             # Fetch from Rfam
 ```
 rmv_sources            # List all 7 sources, their types, and coverage
 rmv_source info 3      # Detailed information about BGSU source
-rmv_source             # Show currently selected source, loaded PDB, motif counts
+rmv_source info        # Show currently active source
 ```
 
 ---
 
-## 6. Multi-Source Comparison
+## 5. Multi-Source Comparison
 
 Combine data from multiple sources. The plugin merges results with smart deduplication.
 
@@ -266,16 +264,16 @@ Combine data from multiple sources. The plugin merges results with smart dedupli
 
 ```
 rmv_fetch 1S72
-rmv_source 1 3         # Combine Atlas [1] + BGSU [3]
-rmv_motifs             # Fetches from both → deduplicates → merged
+rmv_db 1 3             # Combine Atlas [1] + BGSU [3]
+rmv_load_motif         # Fetches from both → deduplicates → merged
 rmv_summary            # Unified summary from both sources
 ```
 
 ### Three-Source Combine
 
 ```
-rmv_source 1 3 4       # Atlas + BGSU + Rfam API
-rmv_motifs
+rmv_db 1 3 4           # Atlas + BGSU + Rfam API
+rmv_load_motif
 rmv_summary
 ```
 
@@ -290,12 +288,13 @@ rmv_summary
 When you switch sources and re-run `rmv_show`, each source gets its own PyMOL objects tagged with a suffix:
 
 ```
-rmv_source 3
-rmv_motifs
+rmv_source info            # Show currently active source
+rmv_db 3
+rmv_load_motif
 rmv_show SARCIN-RICIN     # Creates: SARCIN_RICIN_ALL_S3, SARCIN_RICIN_1_S3, ...
 
-rmv_source 7
-rmv_motifs
+rmv_db 7
+rmv_load_motif
 rmv_show SARCIN-RICIN     # Creates: SARCIN_RICIN_ALL_S7, SARCIN_RICIN_1_S7, ...
 ```
 
@@ -307,7 +306,7 @@ align SARCIN_RICIN_3_S3, SARCIN_RICIN_3_S7
 
 ---
 
-## 7. User Annotations (FR3D / RMS / RMSX)
+## 6. User Annotations (FR3D / RMS / RMSX)
 
 Use your own motif annotation files from FR3D, RNAMotifScan (RMS), or RNAMotifScanX (RMSX).
 
@@ -338,14 +337,24 @@ rna_motif_visualizer/database/user_annotations/
 ```
 rmv_fetch 1S72
 
-rmv_source 5           # FR3D
-rmv_motifs
+rmv_db 5               # FR3D
+rmv_load_motif
 
-rmv_source 6           # RNAMotifScan (RMS)
-rmv_motifs
+rmv_db 6               # RNAMotifScan (RMS)
+rmv_load_motif
 
-rmv_source 7           # RNAMotifScanX (RMSX)
-rmv_motifs
+rmv_db 7               # RNAMotifScanX (RMSX)
+rmv_load_motif
+```
+
+### Custom Data Paths
+
+You can specify a custom directory for your annotation files:
+
+```
+rmv_db 5 /path/to/fr3d/data       # FR3D with custom directory
+rmv_db 6 ~/my_rms_data            # RMS with home-relative path
+rmv_db 7 /path/to/rmsx/data       # RMSX with custom directory
 ```
 
 ### P-Value Filtering (RMS/RMSX Only)
@@ -354,21 +363,21 @@ RNAMotifScan and RNAMotifScanX include P-values in their output. The plugin uses
 
 ```
 # Turn filtering off (show ALL results including high P-values)
-rmv_source 6 off
+rmv_db 6 off
 
 # Turn filtering back on (use default thresholds)
-rmv_source 6 on
+rmv_db 6 on
 
 # Set a custom P-value threshold for a specific motif type
-rmv_source 6 SARCIN-RICIN 0.01
-rmv_source 7 C-LOOP 0.05
+rmv_db 6 SARCIN-RICIN 0.01
+rmv_db 7 C-LOOP 0.05
 ```
 
 When filtering is on, only motif instances with P-value ≤ threshold are shown.
 
 ---
 
-## 8. Customizing Colors
+## 7. Customizing Colors
 
 ### View Current Color Assignments
 
@@ -417,7 +426,7 @@ Any motif type not in this table gets a unique auto-assigned color (bright orang
 
 ---
 
-## 9. Saving Images
+## 8. Saving Images
 
 ### Save All Motif Instances
 
@@ -480,7 +489,7 @@ motif_images/
 
 ---
 
-## 10. Label Chain IDs (Advanced)
+## 9. Label Chain IDs (Advanced)
 
 ### Background
 
@@ -538,7 +547,7 @@ rmv_summary SARCIN-RICIN
 
 ---
 
-## 11. Tips and Tricks
+## 10. Tips and Tricks
 
 ### Force API Refresh (Bypass Cache)
 
@@ -549,20 +558,15 @@ rmv_refresh 1S72       # Re-fetch from API, ignore 30-day cache
 ### Check Current Source
 
 ```
-rmv_source             # Show selected source, loaded PDB, chain mode, motif counts
+rmv_source info        # Show currently active source
 ```
 
 ### Quick Full Pipeline
 
 ```
-rmv_fetch 1S72 && rmv_source 3 && rmv_motifs && rmv_show HL
-```
-
-Or one command at a time:
-```
 rmv_fetch 1S72
-rmv_source 3
-rmv_motifs
+rmv_db 3
+rmv_load_motif
 rmv_show HL
 ```
 
@@ -570,12 +574,12 @@ rmv_show HL
 
 ```
 rmv_fetch 1S72
-rmv_source 3           # BGSU
-rmv_motifs
+rmv_db 3               # BGSU
+rmv_load_motif
 rmv_show HL            # Creates: HL_ALL_S3
 
-rmv_source 1           # Switch to Atlas
-rmv_motifs
+rmv_db 1               # Switch to Atlas
+rmv_load_motif
 rmv_show HL            # Creates: HL_ALL_S1 (BGSU objects persist)
 ```
 
@@ -583,8 +587,8 @@ rmv_show HL            # Creates: HL_ALL_S1 (BGSU objects persist)
 
 ```
 rmv_fetch 1S72
-rmv_source 3
-rmv_motifs
+rmv_db 3
+rmv_load_motif
 
 rmv_summary                    # What motifs are available?
 rmv_summary GNRA               # How many GNRA instances?
@@ -601,7 +605,7 @@ rmv_save current               # Save current view
 If you prefer to load everything in one step (structure + motifs from previously selected source):
 
 ```
-rmv_source 3
+rmv_db 3
 rmv_load 1S72          # Loads PDB + fetches motifs all at once
 ```
 
@@ -620,8 +624,8 @@ This clears the entire PyMOL session (all objects, selections) and resets the pl
 | Step | Command | Purpose |
 |------|---------|---------|
 | Load | `rmv_fetch <PDB>` | Download and load structure |
-| Source | `rmv_source <N>` | Select data source (1-7) |
-| Motifs | `rmv_motifs` | Fetch motif data |
+| Source | `rmv_db <N>` | Select data source (1-7) |
+| Motifs | `rmv_load_motif` | Fetch motif data |
 | Summary | `rmv_summary` | View motif counts |
 | Summary | `rmv_summary <TYPE>` | View instances of a type |
 | Summary | `rmv_summary <TYPE> <N>` | View single instance details |
@@ -633,7 +637,7 @@ This clears the entire PyMOL session (all objects, selections) and resets the pl
 | Save | `rmv_save current` | Save current view (high-res) |
 | Help | `rmv_help` | Full command reference |
 | Info | `rmv_sources` | List all data sources |
-| Info | `rmv_source` | Show currently selected source |
+| Info | `rmv_source info` | Show currently active source |
 | Info | `rmv_chains` | Chain ID diagnostics |
 | Color | `rmv_color <TYPE> <COLOR>` | Change motif color |
 | Color | `rmv_colors` | View color legend |
@@ -644,4 +648,4 @@ This clears the entire PyMOL session (all objects, selections) and resets the pl
 
 ---
 
-*RNA Motif Visualizer v1.0.0 — CBB LAB KU @Rakib Hasan Rahad*
+*RNA Motif Visualizer — CBB LAB KU @Rakib Hasan Rahad*

@@ -1098,7 +1098,8 @@ class VisualizationManager:
         print("=" * 100)
         print(f"  Total Instances: {len(motif_details)}")
         print("-" * 100)
-        print(f"  {'NO.':<6} {'CHAIN':<10} {'RESIDUE RANGES':<50} {'NUCLEOTIDES':<25}")
+        # NUCLEOTIDES column hidden - nucleotide info available via rmv_show <TYPE> <NO>
+        print(f"  {'NO.':<6} {'CHAIN':<10} {'RESIDUE RANGES':<50}")
         print("-" * 100)
         
         for idx, detail in enumerate(motif_details, 1):
@@ -1106,7 +1107,7 @@ class VisualizationManager:
             metadata = detail.get('metadata', {})
             
             if not residues:
-                print(f"  {idx:<6} {'-':<10} {'-':<50} {'-':<25}")
+                print(f"  {idx:<6} {'-':<10} {'-':<50}")
                 continue
             
             # Build position map: (chain, pos) -> nucleotide
@@ -1162,10 +1163,10 @@ class VisualizationManager:
                 
                 residue_range = ', '.join(range_parts) if range_parts else '-'
             
-            # Build nucleotide string per strand
-            nucs_str = self._get_nucleotides_for_strands(residues, metadata, pos_to_nuc)
+            # Nucleotide string computation kept but not displayed in table
+            # nucs_str = self._get_nucleotides_for_strands(residues, metadata, pos_to_nuc)
             
-            print(f"  {idx:<6} {chains_str:<10} {residue_range:<50} {nucs_str:<25}")
+            print(f"  {idx:<6} {chains_str:<10} {residue_range:<50}")
         
         print("-" * 100)
         print("\n  To view a specific instance:")
@@ -1324,14 +1325,14 @@ class VisualizationManager:
         print(f"  Residues: {len(residues)}")
         print("-" * 50)
         
-        # List all residues
-        print(f"  {'CHAIN':<8} {'RESI':<8} {'NUCLEOTIDE':<12}")
+        # List all residues (nucleotide column hidden)
+        print(f"  {'CHAIN':<8} {'RESI':<8}")
         print("-" * 50)
         
         for res in residues:
             if isinstance(res, tuple) and len(res) >= 3:
                 nucleotide, resi, chain = res[0], res[1], res[2]
-                print(f"  {chain:<8} {resi:<8} {nucleotide:<12}")
+                print(f"  {chain:<8} {resi:<8}")
         
         obj_display = sanitize_pymol_name(f"{motif_type}_{instance_no}{source_suffix}")
         print("=" * 50)
@@ -1352,7 +1353,7 @@ class VisualizationManager:
         loaded_motifs = self.motif_loader.get_loaded_motifs()
         
         if not loaded_motifs:
-            self.logger.error("No motifs loaded. Use 'rmv_motifs' first.")
+            self.logger.error("No motifs loaded. Use 'rmv_load_motif' first.")
             return
         
         # Get structure name

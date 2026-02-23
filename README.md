@@ -55,8 +55,7 @@ Or download the [ZIP file](https://github.com/Rakib-Hasan-Rahad/rna-motif-visual
 You should see in the PyMOL terminal:
 
 ```
-[2026-02-20 09:53:20] [SUCCESS] RNA Motif Visualizer GUI initialized
-[2026-02-20 09:53:20] [INFO] Version 2.3.0
+[SUCCESS] RNA Motif Visualizer GUI initialized
 ```
 
 ---
@@ -72,9 +71,11 @@ rmv_help
 ### 2. Load a Structure & Visualize Motifs
 
 ```
-rmv_fetch 1S72           # Download 23S rRNA, fetch motifs
+rmv_fetch 1S72           # Download 23S rRNA structure
+rmv_db 3                 # Select BGSU API source
+rmv_load_motif           # Fetch motif data
 rmv_summary              # Show available motifs
-rmv_show HAIRPIN LOOP    # Highlight hairpin loops
+rmv_show HL              # Highlight hairpin loops
 ```
 
 ### 3. Explore Individual Instances
@@ -87,8 +88,10 @@ rmv_show GNRA 2          # Switch to second instance
 ### 4. Compare Data Sources
 
 ```
-rmv_source 3             # BGSU API
-rmv_source 4             # Rfam API (no re-download!)
+rmv_db 3                 # BGSU API
+rmv_load_motif           # Fetch from BGSU
+rmv_db 4                 # Rfam API (no re-download!)
+rmv_load_motif           # Fetch from Rfam
 ```
 
 ### 5. Export Images
@@ -106,12 +109,13 @@ rmv_save ALL             # Batch export all motif instances
 
 | Command | Description |
 |---------|-------------|
-| `rmv_fetch <PDB_ID>` | Fetch structure + load default motif data |
+| `rmv_fetch <PDB_ID>` | Fetch PDB structure (no motif data) |
 | `rmv_fetch <PDB_ID> cif_use_auth=0` | Load with mmCIF label chain IDs |
-| `rmv_motifs` | Load motif data from selected source |
-| `rmv_source <N>` | Select data source (1-7, see `rmv_sources`) |
+| `rmv_load_motif` | Fetch motif data from selected source |
+| `rmv_db <N>` | Select data source by ID (1-7) |
+| `rmv_db <N> /path/to/data` | Select source with custom data path (5-7) |
 | `rmv_sources` | List all available sources with descriptions |
-| `rmv_load <FILE.pdb>` | Load local PDB file + auto-detect motifs |
+| `rmv_load <PDB_ID>` | Load structure with auto-visualization |
 | `rmv_refresh` | Force re-fetch from API (bypass cache) |
 
 ### Visualization & Navigation
@@ -133,17 +137,19 @@ rmv_save ALL             # Batch export all motif instances
 | `rmv_summary` | Show motif type counts |
 | `rmv_summary <MOTIF_TYPE>` | Show instances of specific type |
 | `rmv_chains` | Show chain IDs + CIF mode status |
-| `rmv_source` | Show currently selected source |
+| `rmv_source info` | Show currently active source |
 | `rmv_source info <N>` | Detailed info about a specific source |
 | `rmv_reset` | Delete all objects & reset plugin to defaults |
 | `rmv_help` | Full command reference |
 
-### Custom Annotations
+### User Annotations
 
 | Command | Description |
 |---------|-------------|
-| `rmv_user <FILE>` | Load custom annotations (FR3D XML, JSON, CSV) |
-| `rmv_user_pvalue <THRESHOLD>` | Filter annotations by p-value |
+| `rmv_user <TOOL> <PDB_ID>` | Load FR3D/RMS/RMSX annotations directly |
+| `rmv_db 6 off` | Disable RMS P-value filtering |
+| `rmv_db 6 on` | Enable RMS P-value filtering |
+| `rmv_db 6 MOTIF 0.01` | Set custom P-value threshold |
 
 ### Image Export
 
@@ -151,6 +157,7 @@ rmv_save ALL             # Batch export all motif instances
 |---------|-------------|
 | `rmv_save current` | Export current PyMOL view as PNG (~300 dpi) |
 | `rmv_save ALL` | Batch export all motif instances |
+| `rmv_save <TYPE> <NO> [rep]` | Save specific instance with representation |
 
 ---
 
@@ -160,23 +167,30 @@ rmv_save ALL             # Batch export all motif instances
 
 | Source | Command | Coverage | Update Frequency |
 |--------|---------|----------|-----------------|
-| **BGSU RNA 3D Hub** | `rmv_source 3` | ~3000+ PDB structures | Weekly |
-| **Rfam** | `rmv_source 4` | Named motifs (GNRA, K-turn, etc.) | Monthly |
+| **BGSU RNA 3D Hub** | `rmv_db 3` | ~3000+ PDB structures | Weekly |
+| **Rfam** | `rmv_db 4` | Named motifs (GNRA, K-turn, etc.) | Monthly |
 
 ### Offline (Bundled, Pre-computed)
 
 | Source | Command | Motif Types | Size |
 |--------|---------|-------------|------|
-| **RNA 3D Motif Atlas** | `rmv_source 1` | 7 types (HL, IL, J3-J7, PSEUDOKNOT) | ~5 MB |
-| **Rfam Local** | `rmv_source 2` | 19 named motifs | ~2 MB |
+| **RNA 3D Motif Atlas** | `rmv_db 1` | 7 types (HL, IL, J3-J7, PSEUDOKNOT) | ~5 MB |
+| **Rfam Local** | `rmv_db 2` | 19 named motifs | ~2 MB |
 
 ### User-Provided (Custom Annotations)
 
-| Source | Command | Format | Example |
-|--------|---------|--------|---------|
-| **FR3D** | `rmv_user fr3d.xml` | XML | [fr3d_example.xml](examples/fr3d_example.xml) |
-| **RNAMotifScan** | `rmv_user rms.json` | JSON | [rms_example.json](examples/rms_example.json) |
-| **Custom CSV** | `rmv_user motifs.csv` | CSV | [custom_example.csv](examples/custom_example.csv) |
+| Source | Command | Description |
+|--------|---------|-------------|
+| **FR3D** | `rmv_db 5` | FR3D analysis output (custom user files) |
+| **RNAMotifScan** | `rmv_db 6` | RNAMotifScan output with P-value filtering |
+| **RNAMotifScanX** | `rmv_db 7` | RNAMotifScanX output with P-value filtering |
+
+Custom data paths supported:
+```
+rmv_db 5 /path/to/fr3d/data
+rmv_db 6 ~/my_rms_data
+rmv_db 7 /path/to/rmsx/data
+```
 
 ---
 
@@ -252,8 +266,8 @@ rm -rf ~/.rna_motif_visualizer_cache/
 ```python
 # In PyMOL:
 rmv_fetch 1S72
-rmv_source 5                    # Load FR3D annotations
-rmv_motifs
+rmv_db 5                        # Select FR3D annotations
+rmv_load_motif                   # Load FR3D data
 rmv_show "INTERNAL LOOP"        # View your predictions
 rmv_save ALL                    # Export for validation report
 ```
@@ -262,14 +276,14 @@ rmv_save ALL                    # Export for validation report
 
 ```python
 rmv_fetch 4V88                  # Ribosomal LSU
-rmv_source 3
-rmv_motifs
+rmv_db 3                        # Select BGSU
+rmv_load_motif
 rmv_summary KINK-TURN           # BGSU: 12 instances
 rmv_show KINK-TURN
 
 # Now switch to Rfam
-rmv_source 4
-rmv_motifs
+rmv_db 4                        # Switch to Rfam API
+rmv_load_motif
 rmv_summary KINK-TURN           # Rfam: 8 instances (different definition)
 rmv_show KINK-TURN
 
@@ -280,8 +294,8 @@ rmv_show KINK-TURN
 
 ```python
 rmv_fetch 1S72
-rmv_source 3
-rmv_motifs
+rmv_db 3                        # Select BGSU
+rmv_load_motif
 rmv_show "SARCIN-RICIN"
 cmd.hide("ribbon")
 cmd.show("sticks")
@@ -295,17 +309,16 @@ rmv_save current                # ~300 dpi PNG ready for journal
 | Problem | Solution |
 |---------|----------|
 | Plugin not appearing | Verify you selected `rna_motif_visualizer` folder (not parent directory) in Plugin Manager |
-| No motifs found | Try `rmv_source 1` (local) or check structure is in PDB database |
-| API errors | Check internet connection; try `rmv_source 2` (local only) |
+| No motifs found | Try `rmv_db 1` (local) or check structure is in PDB database |
+| API errors | Check internet connection; try `rmv_db 2` (local only) |
 | Slow first load | Normal—API call + caching. Second load is instant |
 | Chain ID mismatch in annotations | Use `rmv_fetch <ID> cif_use_auth=0` for label ID mode |
 | Session not saving | Save as `.pse` (PyMOL Session) before `rmv_save` |
 
 **Reset everything:**
 ```python
-cmd.delete("all")
-cmd.reset()
-rmv_fetch 1S72
+rmv_reset                # Delete all objects & reset plugin state
+rmv_fetch 1S72           # Start fresh
 ```
 
 ---
@@ -327,7 +340,7 @@ rna-motif-visualizer/
 ├── rna_motif_visualizer/
 │   ├── __init__.py                  # Package init, version info
 │   ├── plugin.py                    # PyMOL plugin entry point
-│   ├── gui.py                       # Command handlers (17 commands)
+│   ├── gui.py                       # Command handlers (18 commands)
 │   ├── loader.py                    # Rendering & visualization logic
 │   ├── colors.py                    # Motif color definitions
 │   ├── database/
@@ -363,12 +376,13 @@ Step 2: Export predictions to CSV/JSON
         ↓
 Step 3: Load in RNA Motif Visualizer
         rmv_fetch <PDB_ID>
-        rmv_user predictions.json
+        rmv_db 5 /path/to/predictions
+        rmv_load_motif
         
         ↓
 Step 4: Validate against known motifs
-        rmv_source 3        # BGSU reference
-        rmv_motifs
+        rmv_db 3            # BGSU reference
+        rmv_load_motif
         rmv_show <MOTIF>    # Compare visually
         
         ↓

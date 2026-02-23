@@ -1,6 +1,6 @@
 # RNA Motif Visualizer — Developer Guide
 
-Technical reference for developers working on the RNA Motif Visualizer PyMOL plugin (v2.3.0).
+Technical reference for developers working on the RNA Motif Visualizer PyMOL plugin.
 
 ---
 
@@ -62,9 +62,9 @@ PyMOL
 rmv_fetch <PDB>  →  PyMOL cmd.fetch()  →  store loaded_pdb / loaded_pdb_id
                                          →  parse CIF for auth→label chain map (if cif_use_auth=0)
 
-rmv_source <N>   →  set source mode + provider config in GUI state
+rmv_db <N>       →  set source mode + provider config in GUI state
 
-rmv_motifs       →  dispatch to:
+rmv_load_motif   →  dispatch to:
                      ├── Local/Web:  fetch_motif_data_action()
                      │   └── source_selector → provider.get_motifs() → enrich → merge → store
                      └── User:  load_user_annotations_action()
@@ -85,7 +85,7 @@ rmv_save <TYPE>  →  ImageSaver.save_motif_images()
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `gui.py` | ~2950 | Main GUI class, all 19 command registrations, state management |
+| `gui.py` | ~3100 | Main GUI class, all 18 command registrations, state management |
 | `loader.py` | ~1640 | StructureLoader, UnifiedMotifLoader, VisualizationManager |
 | `plugin.py` | ~120 | Entry point, cif_use_auth lock, welcome banner |
 | `colors.py` | ~330 | MOTIF_COLORS dict, custom overrides, PyMOL color application |
@@ -132,8 +132,6 @@ When PyMOL loads the plugin (`__init_plugin__` in `plugin.py`):
 4. **GUI init** — `initialize_gui()` — creates `MotifVisualizerGUI` and registers all 18 commands
 5. **Welcome banner** — prints version, sources, quick start
 
-Order matters: the chain ID lock (step 2) must happen before any CIF file is loaded to ensure consistent chain IDs across the session.
-
 ---
 
 ## 4. Command Reference
@@ -165,7 +163,7 @@ rmv_fetch 1S72, bg_color=white
 
 ---
 
-#### `rmv_motifs`
+#### `rmv_load_motif`
 
 Fetches motif data from the currently selected source for the loaded PDB.
 
@@ -179,7 +177,7 @@ Fetches motif data from the currently selected source for the loaded PDB.
 
 **Example:**
 ```
-rmv_motifs
+rmv_load_motif
 ```
 
 ---
@@ -214,11 +212,11 @@ rmv_refresh 4V9F
 
 ### Source Selection
 
-#### `rmv_source <N> [N ...] [on|off] [MOTIF P_VALUE ...]`
+#### `rmv_db <N> [N ...] [on|off] [MOTIF P_VALUE ...] [/path/to/data]`
 
-Sets the active data source by ID number (1-7). Supports multi-source combine and P-value filtering.
+Sets the active data source by ID number (1-7). Supports multi-source combine, P-value filtering, and custom data paths.
 
-**Implementation:** `set_source()` → `gui._handle_source_by_id()` / `gui._handle_combine_sources()`
+**Implementation:** `select_database()` → `gui._handle_source_by_id()` / `gui._handle_combine_sources()`
 
 **Source IDs:**
 | ID | Provider | Type |
@@ -233,22 +231,41 @@ Sets the active data source by ID number (1-7). Supports multi-source combine an
 
 **Multi-source:**
 ```
-rmv_source 1 3           # Combine Atlas + BGSU
-rmv_source 1 3 4         # Combine three sources
+rmv_db 1 3               # Combine Atlas + BGSU
+rmv_db 1 3 4             # Combine three sources
 ```
 
 **P-value filtering (RMS/RMSX only):**
 ```
-rmv_source 6 off                          # Disable filtering
-rmv_source 6 on                           # Enable filtering
-rmv_source 6 SARCIN-RICIN 0.01            # Custom P-value threshold
-rmv_source 7 C-LOOP_CONSENSUS 0.05        # RMSX custom threshold
+rmv_db 6 off                          # Disable filtering
+rmv_db 6 on                           # Enable filtering
+rmv_db 6 SARCIN-RICIN 0.01            # Custom P-value threshold
+rmv_db 7 C-LOOP_CONSENSUS 0.05        # RMSX custom threshold
 ```
 
-**Info subcommand:**
+**Custom data path (sources 5-7):**
 ```
-rmv_source info 3        # Detailed info about BGSU source
+rmv_db 5 /path/to/fr3d/data           # FR3D with custom directory
+rmv_db 6 ~/my_rms_data                # RMS with home-relative path
+rmv_db 7 /path/to/rmsx/data           # RMSX with custom directory
 ```
+
+**Info subcommand (via rmv_source):**
+```
+rmv_source info              # Show currently active source
+rmv_source info 3            # Detailed info about BGSU source
+```
+
+---
+
+#### `rmv_source info [N]`
+
+Shows currently active source info, or detailed info about a specific source by ID.
+
+**Implementation:** `set_source(mode='info')` → `gui._handle_source_info_command()` / `gui._print_active_source_info()`
+
+Without an ID: shows the currently active source with its status, filtering settings, and loaded PDB.
+With an ID: shows detailed info for that specific source.
 
 ---
 
@@ -356,6 +373,8 @@ Prints motif information to the console (no rendering).
 - TYPE only: `gui.show_motif_summary_for_type()` — instance table for one type
 - TYPE + NO: `gui.show_motif_instance_summary()` — residue details for one instance
 
+**Note:** Nucleotide columns are hidden from summary output.
+
 **Example:**
 ```
 rmv_summary                   # All motif types table
@@ -365,11 +384,11 @@ rmv_summary SARCIN-RICIN 1    # Instance #1 details
 
 ---
 
-#### `rmv_source` (no args)
+#### `rmv_source info [N]`
 
-Shows currently selected source, loaded PDB, chain mode, and motif counts.
+Shows the currently active source (no args) or detailed info about source N.
 
-**Implementation:** `set_source()` (no args) → `gui.print_source_info()`
+**Implementation:** `set_source()` → `gui._handle_source_info_command()` → `_print_active_source_info()` or `_print_single_source_info()`
 
 ---
 
@@ -452,7 +471,7 @@ rmv_user rnamotifscan 1A00
 rmv_user list                    # Show available annotation files
 ```
 
-> **Note:** Prefer using `rmv_source 5/6/7` + `rmv_motifs` instead.
+> **Note:** Prefer using `rmv_db 5/6/7` + `rmv_load_motif` instead.
 
 ---
 
@@ -590,7 +609,7 @@ Motif databases (BGSU, Atlas, Rfam) use **auth_asym_id** chain IDs. When PyMOL l
 
 ## 7. Multi-Source Pipeline
 
-When combining sources (e.g., `rmv_source 1 3`):
+When combining sources (e.g., `rmv_db 1 3`):
 
 ### Step 1 — Fetch
 
@@ -738,7 +757,7 @@ SOURCE_ID_MAP[8] = {
     'description': 'My custom database',
     'coverage': 'N PDB structures',
     'mode': 'web',
-    'command': 'rmv_source 8',
+    'command': 'rmv_db 8',
 }
 ```
 
@@ -769,12 +788,13 @@ The central state object. Key attributes:
 | `cif_use_auth` | `int` | 1 = auth_asym_id, 0 = label_asym_id |
 | `auth_to_label_map` | `dict` | {auth_chain: label_chain} mapping |
 | `current_source_mode` | `str` | 'local', 'web', 'user', 'combine' |
-| `current_source_id` | `int` | Numeric source ID (1-7) |
+| `current_source_id` | `int\|str` | Numeric source ID (1-7) or combined (e.g., '1_3') |
 | `combined_source_ids` | `list` | Source IDs when combining |
 | `user_rms_filtering_enabled` | `bool` | RMS P-value filtering on/off |
 | `user_rmsx_filtering_enabled` | `bool` | RMSX P-value filtering on/off |
 | `user_rms_custom_pvalues` | `dict` | {motif_name: p_value} overrides |
 | `user_rmsx_custom_pvalues` | `dict` | {motif_name: p_value} overrides |
+| `user_data_path` | `str\|None` | Custom data directory for FR3D/RMS/RMSX |
 | `viz_manager` | `VisualizationManager` | Manages loading + rendering |
 
 ### `VisualizationManager` (`loader.py`)
@@ -817,4 +837,4 @@ Handles multi-word motif type names (e.g., "4-WAY JUNCTION (J4) 1"):
 
 ---
 
-*RNA Motif Visualizer v2.3.0 — CBB LAB @Rakib Hasan Rahad*
+*RNA Motif Visualizer — CBB LAB @Rakib Hasan Rahad*
