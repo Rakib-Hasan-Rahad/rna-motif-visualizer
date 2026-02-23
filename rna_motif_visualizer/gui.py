@@ -1,0 +1,2941 @@
+"""
+RNA Motif Visualizer - GUI Module
+Provides PyMOL GUI interface for the plugin with multi-database support.
+
+This module provides:
+- MotifVisualizerGUI: Main GUI class for the plugin
+- PyMOL command registration
+- Database selection and switching functionality
+
+Author: CBB LAB @Rakib Hasan Rahad
+Version: 2.3.0
+"""
+
+from typing import List, Optional, Dict, Tuple
+from pymol import cmd
+from .loader import VisualizationManager
+from .utils import get_logger
+from . import colors
+from .database import get_registry
+from .database.config import SOURCE_ID_MAP
+from pathlib import Path
+
+
+class MotifVisualizerGUI:
+    """PyMOL GUI for RNA motif visualization with multi-database support."""
+    
+    def __init__(self):
+        """Initialize GUI components."""
+        self.logger = get_logger()
+        
+        # Get path to motif database
+        plugin_dir = Path(__file__).parent
+        self.database_dir = plugin_dir / 'motif_database'
+        
+        # Initialize visualization manager
+        self.viz_manager = VisualizationManager(cmd, str(self.database_dir))
+        
+        # Track UI state
+        self.motif_visibility = {}
+        
+        # Track currently loaded PDB
+        self.loaded_pdb = None
+        self.loaded_pdb_id = None
+        
+        # Track current source mode
+        self.current_source_mode = None
+        self.current_user_tool = None
+        self.current_local_source = None      # 'atlas', 'rfam', or None (for both)
+        self.current_web_source = None         # 'bgsu', 'rfam', or None (for auto)
+        self.combined_source_ids = []          # List of source IDs for combining
+        self.current_source_id = None          # Numeric source ID (1-7) for object tagging
+        
+        # Track filtering state for RMS and RMSX (for user annotations)
+        self.user_rms_filtering_enabled = True   # Default: filters ON
+        self.user_rmsx_filtering_enabled = True  # Default: filters ON
+        
+        # Track custom P-values for RMS and RMSX
+        self.user_rms_custom_pvalues = {}        # Dict: {motif_name: p_value}
+        self.user_rmsx_custom_pvalues = {}       # Dict: {motif_name: p_value}
+        
+        # Track chain ID convention: 1 = auth_asym_id (default), 0 = label_asym_id
+        self.cif_use_auth = 1
+        self.auth_to_label_map = {}   # auth_asym_id → label_asym_id chain mapping
+    
+    def _get_source_suffix(self):
+        """Get source suffix for PyMOL object naming (e.g., '_S3' for source 3).
+        Returns empty string if no source is explicitly set."""
+        if self.current_source_id is not None:
+            return f"_S{self.current_source_id}"
+        return ""
+    
+    def _build_auth_label_chain_mapping(self, pdb_id):
+        """Parse CIF file to build auth_asym_id → label_asym_id chain mapping.
+        
+        When cif_use_auth=0, PyMOL uses label_asym_id as 'chain' and loses
+        auth_asym_id from the model. But all motif databases reference auth chains.
+        This method parses the CIF file from disk to recover the mapping.
+        
+        Returns:
+            dict: {auth_asym_id: label_asym_id} for each unique chain pair
+        """
+        import os
+        
+        # Find CIF file in PyMOL's fetch path
+        fetch_path = "."
+        try:
+            fp = cmd.get("fetch_path")
+            if fp:
+                fetch_path = str(fp).strip()
+        except:
+            pass
+        
+        cif_path = None
+        for name in [f"{pdb_id.lower()}.cif", f"{pdb_id.upper()}.cif"]:
+            candidate = os.path.join(fetch_path, name)
+            if os.path.exists(candidate):
+                cif_path = candidate
+                break
+        
+        if not cif_path:
+            self.logger.debug(f"CIF file not found in: {fetch_path}")
+            return {}
+        
+        # Parse CIF _atom_site loop to extract auth_asym_id and label_asym_id columns
+        auth_col = -1
+        label_col = -1
+        col_count = 0
+        reading_headers = False
+        reading_data = False
+        mapping = {}
+        
+        try:
+            with open(cif_path, 'r') as f:
+                for line in f:
+                    stripped = line.strip()
+                    
+                    if not stripped or stripped.startswith('#'):
+                        if reading_data:
+                            break
+                        continue
+                    
+                    if stripped.startswith('loop_'):
+                        if reading_data:
+                            break
+                        reading_headers = False
+                        reading_data = False
+                        col_count = 0
+                        auth_col = -1
+                        label_col = -1
+                        continue
+                    
+                    if stripped.startswith('_atom_site.'):
+                        reading_headers = True
+                        col_name = stripped.split()[0]
+                        if col_name == '_atom_site.auth_asym_id':
+                            auth_col = col_count
+                        elif col_name == '_atom_site.label_asym_id':
+                            label_col = col_count
+                        col_count += 1
+                        continue
+                    
+                    if reading_headers and not stripped.startswith('_'):
+                        reading_headers = False
+                        reading_data = True
+                        if auth_col < 0 or label_col < 0:
+                            self.logger.debug(f"CIF missing columns: auth_col={auth_col}, label_col={label_col}")
+                            return {}
+                    
+                    if reading_data:
+                        if stripped.startswith('_') or stripped.startswith('data_') or stripped.startswith('loop_'):
+                            break
+                        
+                        tokens = stripped.split()
+                        max_col = max(auth_col, label_col)
+                        if len(tokens) > max_col:
+                            auth_id = tokens[auth_col]
+                            label_id = tokens[label_col]
+                            # Keep first mapping per auth chain (ATOM records come before HETATM,
+                            # so polymer chains are mapped first — correct for motif data)
+                            if auth_id not in mapping:
+                                mapping[auth_id] = label_id
+            
+            if mapping:
+                self.logger.debug(f"CIF auth→label mapping ({len(mapping)} chains): "
+                                 f"{dict(list(mapping.items())[:8])}")
+            return mapping
+            
+        except Exception as e:
+            self.logger.debug(f"Error parsing CIF for chain mapping: {e}")
+            return {}
+
+    def load_structure_action(self, pdb_id_or_path, background_color=None,
+                              database=None):
+        """
+        Load structure and automatically visualize all motifs.
+        
+        Args:
+            pdb_id_or_path (str): PDB ID or file path
+            background_color (str): Color for RNA backbone (default: 'gray80')
+            database (str): Database to use ('atlas', 'rfam', or None for active)
+        """
+        try:
+            self.logger.info(f"Loading structure: {pdb_id_or_path}")
+            
+            # Load and visualize with specified database
+            motifs = self.viz_manager.load_and_visualize(
+                pdb_id_or_path, 
+                background_color,
+                provider_id=database
+            )
+            
+            if not motifs:
+                self.logger.warning("No motifs found or error loading structure")
+                return
+            
+            # Update UI state
+            self.motif_visibility = {}
+            for motif_type, info in motifs.items():
+                self.motif_visibility[motif_type] = True
+            
+            self.logger.success(f"Loaded {len(motifs)} motif types")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load structure: {e}")
+    
+    def fetch_motif_data_action(self, pdb_id, background_color=None):
+        """
+        Load motif data for a structure WITHOUT creating PyMOL objects (for rmv_motifs).
+        
+        Handles combine mode by loading from multiple sources and merging.
+        Uses self.loaded_pdb as the structure name (set by rmv_fetch).
+        
+        Args:
+            pdb_id (str): PDB ID already loaded in PyMOL
+            background_color (str): Optional background color
+        """
+        try:
+            # Set background color if specified
+            if background_color:
+                cmd.bg_color(background_color)
+            
+            # Structure name is the raw PDB name (set by rmv_fetch, no source suffix)
+            # Motif objects get source suffixes, but the PDB structure is shared
+            source_suffix = self._get_source_suffix()
+            structure_name = self.loaded_pdb or pdb_id.lower()
+            self.loaded_pdb_id = pdb_id.upper()
+            pdb_id_upper = pdb_id.upper()
+            
+            # Check if we're in combine mode
+            if self.current_source_mode == 'combine' and self.combined_source_ids:
+                # Load and merge from multiple sources
+                available_motifs = self._load_combined_motifs(
+                    pdb_id_upper,
+                    self.combined_source_ids
+                )
+                source_name = f"combined ({len(self.combined_source_ids)} sources)"
+            else:
+                # Load from single source
+                from .database import get_source_selector
+                source_selector = get_source_selector()
+                
+                if source_selector:
+                    # Check if we're in user mode with specific tool selected
+                    if self.current_source_mode == 'user' and self.current_user_tool:
+                        # Use tool-specific method to filter data
+                        self.logger.debug(f"Using tool-specific loading: {self.current_user_tool}")
+                        available_motifs = source_selector.get_motifs_for_pdb_and_tool(
+                            pdb_id_upper, self.current_user_tool
+                        )
+                        source_name = self.current_user_tool.upper()
+                    else:
+                        # Get motif data from source selector (default)
+                        self.logger.debug(f"Using default loading (mode={self.current_source_mode}, tool={self.current_user_tool})")
+                        
+                        # Pass specific source if one is selected (local or web)
+                        source_override = None
+                        if self.current_source_mode == 'local' and self.current_local_source:
+                            source_override = self.current_local_source
+                            self.logger.debug(f"Using specific local source: {source_override}")
+                        elif self.current_source_mode == 'web' and self.current_web_source:
+                            # Map web source to provider ID
+                            web_source_map = {'bgsu': 'bgsu_api', 'rfam_api': 'rfam_api'}
+                            source_override = web_source_map.get(self.current_web_source)
+                            if source_override:
+                                self.logger.debug(f"Using specific web source: {source_override}")
+                        
+                        # VERIFICATION: Check config.specific_source matches
+                        from .database import get_config
+                        config = get_config()
+                        if config.specific_source and source_override != config.specific_source:
+                            self.logger.warning(f"Mismatch: source_override={source_override}, config.specific_source={config.specific_source}")
+                            source_override = config.specific_source  # Use config value as authoritative
+                        
+                        self.logger.debug(f"Final source_override={source_override}, config.specific_source={config.specific_source}")
+                        
+                        available_motifs, source_used = source_selector.get_motifs_for_pdb(
+                            pdb_id_upper,
+                            source_override=source_override
+                        )
+                        source_name = source_used or "unknown"
+                else:
+                    # Fall back to active provider
+                    registry = self.viz_manager.motif_loader._registry
+                    provider = registry.get_active_provider()
+                    if not provider:
+                        self.logger.error("No database provider available")
+                        return
+                    
+                    available_motifs = provider.get_motifs_for_pdb(pdb_id_upper)
+                    source_name = provider.info.name if hasattr(provider, 'info') else 'unknown'
+            
+            if not available_motifs:
+                self.logger.warning(f"No motifs found for {pdb_id}")
+                return
+            
+            # Use pre-built auth→label chain mapping (from CIF parsing in rmv_fetch)
+            # When cif_use_auth=0, motif data has auth_asym_id chains but PyMOL has label_asym_id
+            auth_to_label = self.auth_to_label_map if self.cif_use_auth == 0 else {}
+            
+            # Count total motifs
+            total_count = sum(len(instances) for instances in available_motifs.values())
+            self.logger.success(f"Found {total_count} motifs in {pdb_id} (source: {source_name})")
+            
+            # Process motifs for data access (WITHOUT creating PyMOL objects)
+            motif_summary = {}
+            from .utils.parser import SelectionParser
+            
+            for motif_type, instances in available_motifs.items():
+                display_type = motif_type.split(':')[-1] if ':' in motif_type else motif_type
+                display_type_upper = display_type.upper()
+                
+                # Convert to motif details format (same as _load_motif_type does)
+                motif_details = []
+                motif_list = []
+                
+                for instance in instances:
+                    if hasattr(instance, 'residues') and instance.residues:
+                        # Remap chain IDs if in label mode (cif_use_auth=0)
+                        if auth_to_label:
+                            for r in instance.residues:
+                                if r.chain in auth_to_label:
+                                    r.chain = auth_to_label[r.chain]
+                        
+                        # Include metadata from instance (contains chainbreak info)
+                        from copy import deepcopy
+                        metadata_to_store = deepcopy(instance.metadata) if hasattr(instance, 'metadata') and instance.metadata else {}
+                        
+                        motif_details.append({
+                            'motif_id': instance.motif_id,
+                            'instance_id': instance.instance_id,
+                            'residues': [r.to_tuple() for r in instance.residues],
+                            'annotation': instance.annotation,
+                            'metadata': metadata_to_store,
+                        })
+                        
+                        # Also build motif_list for selection string creation
+                        legacy_entries = instance.to_legacy_format()
+                        motif_list.extend(legacy_entries)
+                
+                # Build main_selection string (needed for show_motif_type to work)
+                main_motif_sel = None
+                if motif_list:
+                    all_selections = []
+                    for motif in motif_list:
+                        chain = motif.get('chain')
+                        residues = motif.get('residues')
+                        sel = SelectionParser.create_selection_string(chain, residues)
+                        if sel:
+                            all_selections.append(f"({sel})")
+                    
+                    if all_selections:
+                        combined_sel = " or ".join(all_selections)
+                        main_motif_sel = f"({structure_name}) and ({combined_sel})"
+                
+                if motif_details:
+                    if display_type_upper in motif_summary:
+                        # Accumulate into existing entry (handles key casing variants)
+                        existing = motif_summary[display_type_upper]
+                        existing['motif_details'].extend(motif_details)
+                        existing['motifs'].extend(motif_list)
+                        existing['count'] += len(motif_details)
+                        # Rebuild combined selection
+                        if main_motif_sel:
+                            if existing['main_selection']:
+                                existing['main_selection'] = f"{existing['main_selection']} or {main_motif_sel}"
+                            else:
+                                existing['main_selection'] = main_motif_sel
+                        self.logger.success(f"Loaded {len(motif_details)} more {display_type_upper} motifs (total: {existing['count']})")
+                    else:
+                        motif_summary[display_type_upper] = {
+                            'object_name': None,  # Will be created when rmv_show is called
+                            'structure_name': structure_name,
+                            'count': len(motif_details),
+                            'visible': False,
+                            'motif_details': motif_details,
+                            'motifs': motif_list,  # Needed to create PyMOL objects later
+                            'main_selection': main_motif_sel,
+                            'source_suffix': source_suffix,
+                        }
+                        self.logger.success(f"Loaded {len(motif_details)} {display_type_upper} motifs")
+            
+            # Store in viz_manager's motif_loader for rmv_summary/rmv_show to access
+            self.viz_manager.motif_loader.loaded_motifs = motif_summary
+            
+            # CRITICAL: Also set structure_loader fields so rmv_save can find them
+            self.viz_manager.structure_loader.current_structure = structure_name
+            self.viz_manager.structure_loader.current_pdb_id = pdb_id_upper
+            
+            if motif_summary:
+                self.logger.success(f"Loaded {len(motif_summary)} motif types from {pdb_id}")
+                self.logger.info("")
+                self.logger.info("Motif data ready (not rendered, no objects created)")
+                self.logger.info("Next steps:")
+                self.logger.info(f"  rmv_summary              Show all motifs")
+                self.logger.info(f"  rmv_summary HL           Show HL instances")
+                self.logger.info(f"  rmv_show HL              Render hairpin loops")
+                self.logger.info("")
+            else:
+                self.logger.warning(f"No valid motifs found for {pdb_id}")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to load motif data: {str(e)}")
+    
+    def _load_combined_motifs(self, pdb_id: str, source_ids: List[int]):
+        """
+        Load, enrich, and cascade-merge motifs from multiple sources.
+        
+        Pipeline:
+        1. Fetch raw motifs from each source
+        2. Enrich generic sources (1,3,5) via homolog representative lookup
+        3. Cascade merge (right-to-left, priority = source order)
+        
+        Args:
+            pdb_id: PDB ID to fetch
+            source_ids: List of source IDs in priority order (first = highest)
+        
+        Returns:
+            Merged motif dictionary: {motif_type: [MotifInstance, ...]}
+        """
+        try:
+            from .database.config import SOURCE_ID_MAP
+            from .database.cascade_merger import CascadeMerger
+            from .database.homolog_enricher import HomologEnricher
+            from .database.representative_set import get_representative_loader
+            
+            pdb_id = pdb_id.upper()
+            
+            # Sources that use generic names and need enrichment
+            GENERIC_SOURCES = {1, 3, 5}  # Atlas, BGSU, FR3D
+            
+            # --- Step 1: Fetch raw motifs from each source ---
+            self.logger.info(f"Step 1/3: Fetching motifs from {len(source_ids)} sources...")
+            raw_sources = {}
+            source_labels = []
+            
+            for sid in source_ids:
+                info = SOURCE_ID_MAP.get(sid, {})
+                label = info.get('name', f'Source {sid}')
+                source_labels.append(label)
+                
+                motifs = self._fetch_from_single_source(pdb_id, sid)
+                if motifs:
+                    raw_sources[sid] = motifs
+                    total = sum(len(v) for v in motifs.values())
+                    self.logger.info(f"  [{sid}] {label}: {total} motifs in {len(motifs)} categories")
+                else:
+                    raw_sources[sid] = {}
+                    self.logger.warning(f"  [{sid}] {label}: no motifs found")
+            
+            if not any(raw_sources.values()):
+                self.logger.error("No motifs found from any source")
+                return {}
+            
+            # --- Step 2: Enrich generic sources via homolog ---
+            generic_in_selection = [sid for sid in source_ids if sid in GENERIC_SOURCES and raw_sources.get(sid)]
+            
+            if generic_in_selection:
+                self.logger.info(f"Step 2/3: Enriching {len(generic_in_selection)} generic source(s) via homolog lookup...")
+                try:
+                    rep_loader = get_representative_loader()
+                    
+                    # Get or create BGSU provider for fetching representative annotations
+                    from .database import get_source_selector
+                    source_selector = get_source_selector()
+                    bgsu_provider = None
+                    if source_selector and hasattr(source_selector, 'providers'):
+                        bgsu_provider = source_selector.providers.get('bgsu_api')
+                    
+                    if not bgsu_provider:
+                        # Create a standalone BGSU provider
+                        from .database.bgsu_api_provider import BGSUAPIProvider
+                        from .database import get_cache_manager
+                        bgsu_provider = BGSUAPIProvider(cache_manager=get_cache_manager())
+                    
+                    enricher = HomologEnricher(rep_loader, bgsu_provider)
+                    
+                    for sid in generic_in_selection:
+                        if raw_sources[sid]:
+                            before_cats = len(raw_sources[sid])
+                            raw_sources[sid] = enricher.enrich(pdb_id, raw_sources[sid])
+                            after_cats = len(raw_sources[sid])
+                            self.logger.info(f"  [{sid}] Enriched: {before_cats} -> {after_cats} categories")
+                            
+                except Exception as e:
+                    self.logger.warning(f"Enrichment failed (using generic names): {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                self.logger.info("Step 2/3: No generic sources to enrich (all sources have specific names)")
+            
+            # --- Step 3: Cascade merge ---
+            self.logger.info(f"Step 3/3: Cascade merging {len(source_ids)} sources...")
+            
+            # Build ordered list matching source_ids order
+            ordered_sources = [raw_sources.get(sid, {}) for sid in source_ids]
+            ordered_labels = [SOURCE_ID_MAP.get(sid, {}).get('name', f'Source {sid}') for sid in source_ids]
+            
+            merger = CascadeMerger(jaccard_threshold=0.60)
+            merged = merger.merge_sources(ordered_sources, ordered_labels)
+            
+            if merged:
+                total = sum(len(v) for v in merged.values())
+                self.logger.success(f"Merge complete: {total} motifs in {len(merged)} categories")
+            
+            return merged
+            
+        except Exception as e:
+            self.logger.error(f"Failed to combine motifs: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+    
+    def _fetch_from_single_source(self, pdb_id: str, source_id: int):
+        """
+        Fetch motifs from a single source by its ID.
+        
+        Maps source IDs to the correct provider and fetches motifs.
+        
+        Args:
+            pdb_id: PDB ID to fetch
+            source_id: Source ID (1-7)
+        
+        Returns:
+            Dict mapping motif_type -> [MotifInstance, ...], or empty dict
+        """
+        from .database.config import SOURCE_ID_MAP
+        
+        info = SOURCE_ID_MAP.get(source_id)
+        if not info:
+            return {}
+        
+        source_type = info['type']
+        
+        try:
+            if source_type in ('local', 'web'):
+                # Use source selector with explicit override
+                from .database import get_source_selector
+                source_selector = get_source_selector()
+                if not source_selector:
+                    return {}
+                
+                # Map source ID to provider ID
+                if source_type == 'local':
+                    provider_id = info.get('subtype')  # 'atlas' or 'rfam'
+                else:
+                    # Web sources
+                    web_map = {'bgsu': 'bgsu_api', 'rfam_api': 'rfam_api'}
+                    provider_id = web_map.get(info.get('subtype'))
+                
+                if provider_id and provider_id in source_selector.providers:
+                    return source_selector.providers[provider_id].get_motifs_for_pdb(pdb_id)
+                else:
+                    # Try via source_override
+                    motifs, _ = source_selector.get_motifs_for_pdb(
+                        pdb_id, source_override=provider_id
+                    )
+                    return motifs
+                    
+            elif source_type == 'user':
+                # User annotations (FR3D, RMS, RMSX)
+                from .database.user_annotations import UserAnnotationProvider
+                plugin_dir = Path(__file__).parent
+                user_dir = plugin_dir / 'database' / 'user_annotations'
+                provider = UserAnnotationProvider(str(user_dir))
+                tool = info.get('tool')
+                if tool:
+                    provider.set_active_tool(tool)
+                    # Apply p-value filtering settings for RMS/RMSX
+                    tool_lower = tool.lower()
+                    if tool_lower in ['rms', 'rnamotifscan']:
+                        provider.apply_rms_filtering = self.user_rms_filtering_enabled
+                        provider.set_rms_custom_pvalues(self.user_rms_custom_pvalues)
+                    elif tool_lower in ['rmsx', 'rnamotifscanx']:
+                        provider.apply_rmsx_filtering = self.user_rmsx_filtering_enabled
+                        provider.set_rmsx_custom_pvalues(self.user_rmsx_custom_pvalues)
+                return provider.get_motifs_for_pdb(pdb_id)
+            
+        except Exception as e:
+            self.logger.warning(f"Error fetching from source {source_id}: {e}")
+        
+        return {}
+    
+    def load_user_annotations_action(self, tool, pdb_id):
+        """
+        Load motifs from user-uploaded annotation files.
+        
+        Args:
+            tool (str): Tool name ('fr3d', 'rnamotifscan')
+            pdb_id (str): PDB ID to load annotations for
+        """
+        try:
+            from .database.user_annotations import UserAnnotationProvider
+            
+            # Initialize user annotation provider
+            plugin_dir = Path(__file__).parent
+            user_annotations_dir = plugin_dir / 'database' / 'user_annotations'
+            provider = UserAnnotationProvider(str(user_annotations_dir))
+            
+            # SET ACTIVE TOOL FILTER BEFORE LOADING!
+            provider.set_active_tool(tool)
+            
+            # Set filtering state based on current settings (for RMS and RMSX only)
+            tool_lower = tool.lower() if tool else ''
+            if tool_lower in ['rms', 'rnamotifscan']:
+                provider.apply_rms_filtering = self.user_rms_filtering_enabled
+                provider.set_rms_custom_pvalues(self.user_rms_custom_pvalues)
+            elif tool_lower in ['rmsx', 'rnamotifscanx']:
+                provider.apply_rmsx_filtering = self.user_rmsx_filtering_enabled
+                provider.set_rmsx_custom_pvalues(self.user_rmsx_custom_pvalues)
+            
+            # Get motifs
+            pdb_id_upper = pdb_id.upper()
+            available_motifs = provider.get_motifs_for_pdb(pdb_id_upper)
+            
+            if not available_motifs:
+                self.logger.warning(f"No {tool.upper()} annotation files found for {pdb_id}")
+                self.logger.info(f"Please place files in: database/user_annotations/{tool}/")
+                return
+            
+            # Structure name is the raw PDB name (set by rmv_fetch, no source suffix)
+            source_suffix = self._get_source_suffix()
+            structure_name = self.loaded_pdb or pdb_id_upper.lower()
+            self.loaded_pdb_id = pdb_id_upper
+            
+            # Map numeric chain IDs to actual PyMOL chain IDs
+            # FR3D uses numeric chains like "1", but PyMOL uses letters like "A"
+            # RMSX/RMS use "0" to represent the chain in annotation data
+            # When cif_use_auth=0 (label mode), PyMOL chains are label_asym_id (AA, BA, CA)
+            # and annotations still use auth chains, so we MAP auth -> label via actual chains
+            chain_mapping = {}
+            try:
+                from pymol import cmd
+                actual_chains = cmd.get_chains(structure_name)
+                if actual_chains:
+                    if tool.lower() == 'fr3d':
+                        # FR3D: Map numeric chains (1, 2, 3...) to actual chains
+                        for idx, actual_chain in enumerate(sorted(actual_chains), 1):
+                            chain_mapping[str(idx)] = actual_chain
+                    elif tool.lower() in ['rnamotifscan', 'rnamotifscanx']:
+                        # RMSX/RMS: Map "0" to first chain (works for both auth and label mode)
+                        sorted_chains = sorted(actual_chains)
+                        if sorted_chains:
+                            chain_mapping['0'] = sorted_chains[0]
+                            # If label mode (cif_use_auth=0), map other common auth IDs too
+                            if self.cif_use_auth == 0 and len(sorted_chains) > 1:
+                                # Map sequential auth IDs to label chains
+                                for idx, label_chain in enumerate(sorted_chains):
+                                    chain_mapping[str(idx)] = label_chain
+                    
+                    if self.cif_use_auth == 0:
+                        self.logger.debug(f"Label mode chain mapping: {chain_mapping}")
+            except Exception as e:
+                self.logger.debug(f"Could not get chains from structure: {e}")
+            
+            # Process motifs (same as fetch_motif_data_action)
+            motif_summary = {}
+            from .utils.parser import SelectionParser
+            
+            total_count = sum(len(instances) for instances in available_motifs.values())
+            self.logger.success(f"Found {total_count} motifs in {pdb_id} (source: {tool.upper()})")
+            
+            for motif_type, instances in available_motifs.items():
+                display_type_upper = motif_type.upper()
+                
+                # Convert to motif details format
+                motif_details = []
+                motif_list = []
+                
+                for instance in instances:
+                    if hasattr(instance, 'residues') and instance.residues:
+                        # Convert residues to tuple format for display
+                        residues_to_use = []
+                        for res in instance.residues:
+                            if hasattr(res, 'to_tuple'):
+                                # ResidueSpec object - convert to tuple
+                                residues_to_use.append(res.to_tuple())
+                            else:
+                                # Already a tuple
+                                residues_to_use.append(res)
+                        
+                        # Apply chain mapping if needed (FR3D)
+                        if chain_mapping:
+                            remapped = []
+                            for nuc, resi, chain in residues_to_use:
+                                remapped.append((nuc, resi, chain_mapping.get(chain, chain)))
+                            residues_to_use = remapped
+                        
+                        # CRITICAL: Include metadata (contains aligned_regions for RMSX)
+                        from copy import deepcopy
+                        instance_metadata = deepcopy(instance.metadata) if hasattr(instance, 'metadata') and instance.metadata else {}
+                        
+                        motif_details.append({
+                            'motif_id': instance.motif_id,
+                            'instance_id': instance.instance_id,
+                            'residues': residues_to_use,
+                            'annotation': instance.annotation,
+                            'metadata': instance_metadata,
+                        })
+                        
+                        
+                        # Build motif_list for selection string with remapped chains
+                        from .database.user_annotations.converters import MotifInstanceSimple
+                        temp_instance = MotifInstanceSimple(
+                            instance.motif_id,
+                            instance.instance_id,
+                            residues_to_use,  # Already converted to tuples above
+                            instance.annotation
+                        )
+                        legacy_entries = temp_instance.to_legacy_format()
+                        motif_list.extend(legacy_entries)
+                
+                # Build main_selection string
+                main_motif_sel = None
+                if motif_list:
+                    all_selections = []
+                    for motif in motif_list:
+                        chain = motif.get('chain')
+                        residues = motif.get('residues')
+                        sel = SelectionParser.create_selection_string(chain, residues)
+                        if sel:
+                            all_selections.append(f"({sel})")
+                    
+                    if all_selections:
+                        combined_sel = " or ".join(all_selections)
+                        main_motif_sel = f"({structure_name}) and ({combined_sel})"
+                
+                if motif_details:
+                    motif_summary[display_type_upper] = {
+                        'object_name': None,
+                        'structure_name': structure_name,
+                        'count': len(motif_details),
+                        'visible': False,
+                        'motif_details': motif_details,
+                        'motifs': motif_list,
+                        'main_selection': main_motif_sel,
+                        'source_suffix': source_suffix,
+                    }
+                    self.logger.success(f"Loaded {len(motif_details)} {display_type_upper} motifs")
+            
+            # Store in viz_manager
+            self.viz_manager.motif_loader.loaded_motifs = motif_summary
+            
+            # CRITICAL: Also set structure_loader fields so rmv_save can find them
+            self.viz_manager.structure_loader.current_structure = structure_name
+            self.viz_manager.structure_loader.current_pdb_id = pdb_id_upper
+            
+            if motif_summary:
+                self.logger.success(f"Loaded {len(motif_summary)} motif types from {tool.upper()}")
+                self.logger.info("")
+                self.logger.info("Motif data ready (not rendered)")
+                self.logger.info("Next steps:")
+                self.logger.info(f"  rmv_summary              Show all motifs")
+                self.logger.info(f"  rmv_summary <TYPE>       Show specific motif type")
+                self.logger.info(f"  rmv_show <TYPE>          Render motif on structure")
+                self.logger.info("")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load user annotations: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    
+    def _list_user_annotations(self):
+        """List all available user annotation files."""
+        try:
+            from pathlib import Path
+            plugin_dir = Path(__file__).parent
+            user_annotations_dir = plugin_dir / 'database' / 'user_annotations'
+            
+            print("\n" + "="*60)
+            print("Available User Annotation Files")
+            print("="*60)
+            
+            found_any = False
+            
+            # Check each tool directory
+            for tool_dir in user_annotations_dir.iterdir():
+                if not tool_dir.is_dir():
+                    continue
+                
+                tool_name = tool_dir.name
+                files = list(tool_dir.glob('*.csv')) + list(tool_dir.glob('*.tsv'))
+                
+                if files:
+                    found_any = True
+                    print(f"\n{tool_name.upper()}:")
+                    for f in files:
+                        print(f"  - {f.name}")
+            
+            if not found_any:
+                print("\nNo annotation files found.")
+                print("Place files in:")
+                print("  - database/user_annotations/fr3d/")
+                print("  - database/user_annotations/rnamotifscan/")
+            
+            print("\n" + "="*60 + "\n")
+            
+        except Exception as e:
+            print(f"Error listing user annotations: {e}")
+    
+    def switch_database_action(self, database_id):
+        """
+        Switch to a different database and reload motifs.
+        
+        Args:
+            database_id (str): Database ID to switch to
+        """
+        try:
+            # Check if structure is loaded
+            info = self.viz_manager.get_structure_info()
+            if not info.get('pdb_id'):
+                # Just switch without reloading
+                registry = get_registry()
+                if registry.set_active_provider(database_id):
+                    self.logger.success(f"Switched to database: {database_id}")
+                else:
+                    self.logger.error(f"Database not found: {database_id}")
+                return
+            
+            # Reload with new database
+            motifs = self.viz_manager.reload_with_database(database_id)
+            
+            if not motifs:
+                self.logger.warning(f"No motifs found in {database_id}")
+                return
+            
+            # Update UI state
+            self.motif_visibility = {}
+            for motif_type, info in motifs.items():
+                self.motif_visibility[motif_type] = True
+            
+            self.logger.success(f"Reloaded with {len(motifs)} motif types from {database_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to switch database: {e}")
+    
+    def toggle_motif_action(self, motif_type, visible):
+        """
+        Toggle visibility of a motif type.
+        
+        Args:
+            motif_type (str): Motif type
+            visible (bool): Visibility state
+        """
+        try:
+            success = self.viz_manager.motif_loader.toggle_motif_type(motif_type, visible)
+            if success:
+                self.motif_visibility[motif_type] = visible
+                status = "shown" if visible else "hidden"
+                self.logger.info(f"Motif {motif_type} {status}")
+            else:
+                self.logger.warning(f"Could not toggle motif {motif_type}")
+        except Exception as e:
+            self.logger.error(f"Failed to toggle motif visibility: {e}")
+    
+    def save_all_motif_images_action(self, representation='cartoon'):
+        """
+        Save images of all loaded motif instances.
+        
+        Creates folder structure: plugin_dir/motif_images/pdb_id/MOTIF_TYPE/instance_*_info.png
+        
+        Args:
+            representation: Display representation ('cartoon', 'sticks', 'spheres', etc.)
+                          Default: 'cartoon'
+        """
+        try:
+            success = self.viz_manager.save_all_motif_images(representation=representation)
+            if success:
+                self.logger.success("All motif images saved successfully")
+            else:
+                self.logger.error("Failed to save motif images")
+        except Exception as e:
+            self.logger.error(f"Failed to save motif images: {e}")
+    
+    def save_motif_type_images_action(self, motif_type, representation='cartoon'):
+        """
+        Save images for a specific motif type.
+        
+        Creates folder structure: plugin_dir/motif_images/pdb_id/MOTIF_TYPE/instance_*_info.png
+        
+        Args:
+            motif_type (str): Motif type to save (e.g., 'HL', 'IL')
+            representation: Display representation ('cartoon', 'sticks', 'spheres', etc.)
+                          Default: 'cartoon'
+        """
+        try:
+            motif_type = motif_type.upper().strip()
+            loaded_motifs = self.viz_manager.motif_loader.get_loaded_motifs()
+            
+            if not loaded_motifs:
+                self.logger.error("No motifs loaded")
+                return
+            
+            if motif_type not in loaded_motifs:
+                self.logger.error(f"Motif type '{motif_type}' not found")
+                self.logger.info(f"Available: {', '.join(sorted(loaded_motifs.keys()))}")
+                return
+            
+            success = self.viz_manager.save_motif_type_images(motif_type, representation=representation)
+            if success:
+                self.logger.success(f"Saved {motif_type} images successfully")
+            else:
+                self.logger.error(f"Failed to save {motif_type} images")
+        except Exception as e:
+            self.logger.error(f"Failed to save motif images: {e}")
+    
+    def save_motif_instance_by_id_action(self, motif_type, instance_id, representation='cartoon'):
+        """
+        Save image for a specific motif instance.
+        
+        Args:
+            motif_type (str): Motif type (e.g., 'HL', 'IL')
+            instance_id (int): Instance number (1-based, as shown in rmv_summary)
+            representation: Display representation ('cartoon', 'sticks', 'spheres', etc.)
+                          Default: 'cartoon'
+        """
+        try:
+            motif_type = motif_type.upper().strip()
+            loaded_motifs = self.viz_manager.motif_loader.get_loaded_motifs()
+            
+            if not loaded_motifs:
+                self.logger.error("No motifs loaded")
+                return
+            
+            if motif_type not in loaded_motifs:
+                self.logger.error(f"Motif type '{motif_type}' not found")
+                self.logger.info(f"Available: {', '.join(sorted(loaded_motifs.keys()))}")
+                return
+            
+            # Check if instance ID is valid
+            motif_instances = loaded_motifs[motif_type]['motif_details']
+            if instance_id < 1 or instance_id > len(motif_instances):
+                self.logger.error(f"Instance ID {instance_id} out of range (1-{len(motif_instances)})")
+                return
+            
+            success = self.viz_manager.save_motif_instance_by_id(motif_type, instance_id, 
+                                                               representation=representation)
+            if success:
+                self.logger.success(f"Saved {motif_type} instance #{instance_id} successfully")
+            else:
+                self.logger.error(f"Failed to save {motif_type} instance #{instance_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to save motif instance: {e}")
+    
+    def save_current_view_action(self, filename):
+        """
+        Save the current PyMOL view to high-resolution PNG.
+        Preserves exact rotation, angle, and zoom at 2400x1800 / 300 dpi.
+        
+        Args:
+            filename (str): Output filename (e.g., 'my_structure.png')
+        """
+        try:
+            from pathlib import Path
+            success = self.viz_manager.save_current_view(filename)
+            if success:
+                # Show full path
+                filepath = Path(filename).resolve()
+                self.logger.success(f"Saved current view to: {filepath}")
+                self.logger.info(f"  Resolution: 2400x1800 px, 300 dpi")
+            else:
+                self.logger.error(f"Failed to save current view")
+        except Exception as e:
+            self.logger.error(f"Failed to save current view: {e}")
+    
+    def get_available_motifs(self):
+        """
+        Get list of available motif types for current PDB.
+        
+        Returns:
+            list: Motif type names
+        """
+        try:
+            pdb_id = self.viz_manager.structure_loader.get_current_pdb_id()
+            if not pdb_id:
+                return []
+            
+            motif_types = self.viz_manager.motif_loader.get_available_motif_types(pdb_id)
+            return motif_types
+        except Exception as e:
+            self.logger.error(f"Failed to get motif types: {e}")
+            return []
+    
+    def get_motif_summary(self, pdb_id):
+        """
+        Get human-readable summary of available motifs for a PDB.
+        
+        Args:
+            pdb_id (str): PDB ID
+            
+        Returns:
+            str: Summary text
+        """
+        try:
+            return self.viz_manager.get_available_motif_summary(pdb_id)
+        except Exception as e:
+            self.logger.error(f"Failed to get motif summary: {e}")
+            return "Error retrieving motif information"
+    
+    def set_background_color(self, color_name):
+        """
+        Change the background color of non-motif residues.
+        
+        Args:
+            color_name (str): PyMOL color name (e.g., 'gray80', 'white', 'lightgray')
+        """
+        try:
+            colors.set_background_color(color_name)
+            # Recolor the current structure if one is loaded
+            current_structure = self.viz_manager.structure_loader.get_current_structure()
+            if current_structure:
+                cmd.color(color_name, current_structure)
+                self.logger.success(f"Background color changed to {color_name}")
+            else:
+                self.logger.info(f"Background color preference set to {color_name}")
+        except Exception as e:
+            self.logger.error(f"Failed to change background color: {e}")
+    
+    def get_motif_info(self, motif_type):
+        """
+        Get information about a motif type.
+        
+        Args:
+            motif_type (str): Motif type
+        
+        Returns:
+            dict: Motif information
+        """
+        motif_type_upper = motif_type.upper()
+        
+        loaded_motifs = self.viz_manager.motif_loader.get_loaded_motifs()
+        
+        if motif_type_upper not in loaded_motifs:
+            return {
+                'type': motif_type_upper,
+                'loaded': False,
+                'count': 0,
+                'visible': False,
+            }
+        
+        info = loaded_motifs[motif_type_upper]
+        
+        return {
+            'type': motif_type_upper,
+            'loaded': True,
+            'count': info.get('count', 0),
+            'visible': info.get('visible', False),
+            'color': colors.get_color_name(motif_type_upper),
+            'description': colors.MOTIF_LEGEND.get(motif_type_upper, {}).get('description', ''),
+        }
+    
+    def list_databases(self):
+        """
+        List all available databases.
+        
+        Returns:
+            list: Database information dictionaries
+        """
+        return self.viz_manager.get_available_databases()
+    
+    def print_status(self):
+        """Print current status to PyMOL console."""
+        info = self.viz_manager.get_structure_info()
+        
+        print("\n" + "="*60)
+        print("RNA MOTIF VISUALIZER - STATUS")
+        print("="*60)
+        
+        # Database info
+        databases = self.list_databases()
+        print("\nAvailable Databases:")
+        for db in databases:
+            active_marker = " [ACTIVE]" if db.get('active') else ""
+            print(f"  {db['id']:10s} - {db['name']}{active_marker}")
+            print(f"              {db['motif_types']} motif types, {db['pdb_count']} PDB structures")
+        
+        if info['structure']:
+            print(f"\nLoaded Structure: {info['structure']}")
+            print(f"PDB ID: {info['pdb_id']}")
+            print(f"Using database: {info.get('database', 'N/A')}")
+        else:
+            print("\nNo structure loaded")
+            print("\nTo get started:")
+            print("  rmv_load <PDB_ID>")
+            print("  rmv_load <PDB_ID>, database=rfam")
+            return
+        
+        if info['motifs']:
+            print(f"\nLoaded Motifs ({len(info['motifs'])}):")
+            for motif_type, data in info['motifs'].items():
+                visible_str = "✓ visible" if data['visible'] else "✗ hidden"
+                print(f"  {motif_type:20s} ({data['count']:2d} instances) {visible_str}")
+        else:
+            print("\nNo motifs loaded for this structure")
+        
+        print("="*60 + "\n")
+    
+    def print_sources(self):
+        """Print available data sources with ID numbers - new format."""
+        print("\n" + "="*80)
+        print("  🗄️  AVAILABLE DATA SOURCES")
+        print("="*80)
+        
+        try:
+            from .database import get_config
+            config = get_config()
+            
+            active_source = config.source_mode.value.upper()
+            if active_source == 'BGSU':
+                active_source += ' (BGSU RNA 3D Hub API)'
+            elif active_source == 'AUTO':
+                active_source += ' (Auto-select)'
+            elif active_source == 'LOCAL':
+                active_source += ' (Local databases)'
+            
+            print(f"\n  Currently Active: {active_source}\n")
+            
+            # Display sources with IDs grouped by category
+            current_category = None
+            for source_id in sorted(SOURCE_ID_MAP.keys()):
+                info = SOURCE_ID_MAP[source_id]
+                category = info.get('category')
+                
+                if category != current_category:
+                    if current_category is not None:
+                        print()
+                    print(f"  {category}:")
+                    print("  " + "-"*76)
+                    current_category = category
+                
+                # Format: ID | Source Name | Command
+                source_name = info.get('name', 'Unknown')
+                cmd_str = f"rmv_source {source_id}"
+                if info.get('supports_filtering'):
+                    cmd_str += " [on|off|custom]" 
+                
+                print(f"    [{source_id}] {source_name:<24} {cmd_str}")
+            
+            print("\n" + "="*80)
+            print("  COMMAND EXAMPLES")
+            print("="*80)
+            print("""
+    Basic Usage:
+      rmv_source 1                     Select RNA 3D Atlas
+      rmv_source 3                     Select BGSU RNA 3D Hub API
+      rmv_source 6                     Select RNAMotifScan (RMS)
+    
+    Multi-Source Combine (NEW):
+      rmv_source 1 3                   Combine Atlas + BGSU (Atlas = priority)
+      rmv_source 2 5 3                 Combine 3 sources (Rfam = highest priority)
+      -> Includes homolog enrichment & cascade merge
+    
+    With Filtering Control (RMS/RMSX):
+      rmv_source 6 off                 Show all motifs (no filtering)
+      rmv_source 7 on                  Apply default P-value cutoffs
+      rmv_source 6 C-LOOP 0.05 KINK-TURN 0.02   Custom P-values
+    
+    Combine with P-values (2-step workflow):
+      Step 1: rmv_source 6 C-LOOP 0.05 KINK-TURN 0.02   Set P-values
+      Step 2: rmv_source 1 6           Combine Atlas + RMS (P-values apply)
+    
+    After selecting a source:
+      rmv_fetch 1S72                   Load structure + motif data
+      rmv_summary                      Show available motifs
+""")
+            print("="*80)
+            print("  MORE INFO")
+            print("="*80)
+            print("""
+    Get detailed info about a source:
+      rmv_source info 1                Show detailed info for source 1
+    
+    Get help:
+      rmv_help                         List all available commands
+""")
+        except Exception as e:
+            print(f"  Error loading sources: {e}")
+        
+        print("="*80 + "\n")
+    
+    def print_help(self):
+        """Print all available commands in box format."""
+        print("\n" + "┌" + "─"*78 + "┐")
+        print("│" + "  RNA MOTIF VISUALIZER - AVAILABLE COMMANDS".center(78) + "│")
+        print("└" + "─"*78 + "┘\n")
+        
+        print("┌" + "─"*78 + "┐")
+        print("│  🔧 SOURCE SELECTION                                                    │")
+        print("├" + "─"*78 + "┤")
+        print("│  rmv_source <N>            Set motif data source by ID (1-7)             │")
+        print("│  rmv_source <N> <N>        Combine multiple sources (e.g., 1 3)         │")
+        print("│  rmv_sources               List all available data sources              │")
+        print("├" + "─"*78 + "┤")
+        print("│  📥 LOADING & DATA                                                      │")
+        print("├" + "─"*78 + "┤")
+        print("│  rmv_fetch <PDB_ID>        Load PDB structure (no motif data)            │")
+        print("│  rmv_fetch <ID> cif_use_auth=0  Load with label_asym_id chains          │")
+        print("│  rmv_motifs                Fetch motif data from selected source         │")
+        print("│  rmv_load <PDB_ID>         Load structure with motif visualization      │")
+        print("│  rmv_refresh [PDB_ID]      Force refresh motifs from API                │")
+        print("├" + "─"*78 + "┤")
+        print("│  🎨 VISUALIZATION                                                       │")
+        print("├" + "─"*78 + "┤")
+        print("│  rmv_all                   Show all motifs (reset view)                 │")
+        print("│  rmv_show <TYPE>           Highlight all instances of a motif type      │")
+        print("│  rmv_show <TYPE> <NO>      Zoom to specific instance with details       │")
+        print("│  rmv_toggle <TYPE> on/off  Toggle motif visibility                      │")
+        print("│  rmv_bg_color <COLOR>      Change background (non-motif) color          │")
+        print("│  rmv_color <TYPE> <COLOR>  Change motif color                           │")
+        print("│  rmv_colors                Show color legend for motif types             │")
+        print("├" + "─"*78 + "┤")
+        print("│  💾 SAVE & EXPORT COMMANDS                                              │")
+        print("├" + "─"*78 + "┤")
+        print("│  rmv_save ALL [rep]        Save all motif instance images to disk        │")
+        print("│  rmv_save <TYPE> [rep]     Save all instances of specific motif type    │")
+        print("│  rmv_save <TYPE> <NO> [rep]Save specific motif instance by ID           │")
+        print("│                            (Saves MOTIF ONLY - no background structure) │")
+        print("│  rmv_save current          Save current PyMOL view (like png command)   │")
+        print("│  rmv_save current <FILE>   Save current view to specific filename       │")
+        print("│  [rep]: cartoon (default), sticks, spheres, ribbon, lines, etc.         │")
+        print("│                            (Output: plugin_dir/motif_images/pdb_id/)    │")
+        print("├" + "─"*78 + "┤")
+        print("│  📊 INFORMATION COMMANDS                                                │")
+        print("├" + "─"*78 + "┤")
+        print("│  rmv_summary               Show all motif types & counts                 │")
+        print("│  rmv_summary <TYPE>        Show instances of specific type               │")
+        print("│  rmv_summary <TYPE> <NO>   Show specific instance details                │")
+        print("│  rmv_status                Show plugin status & configuration             │")
+        print("│  rmv_chains [structure]    Show chain ID diagnostics (auth/label mapping)│")
+        print("│  rmv_help                  Show this command reference                   │")
+        print("├" + "─"*78 + "┤")
+        print("│  📁 USER ANNOTATIONS                                                    │")
+        print("├" + "─"*78 + "┤")
+        print("│  rmv_user <TOOL> <PDB_ID>  Load FR3D/RMS/RMSX annotations directly       │")
+        print("│  rmv_source 6 off          Disable RMS P-value filtering                │")
+        print("│  rmv_source 6 on           Enable RMS P-value filtering                 │")
+        print("│  rmv_source 6 MOTIF 0.01   Set custom P-value threshold for motif       │")
+        print("└" + "─"*78 + "┘")
+        
+        print("\n  QUICK EXAMPLES:")
+        print("  ───────────────")
+        print("  1. Standard workflow (recommended):")
+        print("     rmv_fetch 1S72            # Load PDB structure")
+        print("     rmv_source 3              # Select BGSU API")
+        print("     rmv_motifs                # Fetch motif data")
+        print("     rmv_summary               # View summary")
+        print("     rmv_show HL               # Render hairpin loops")
+        print()
+        print("  2. Switch sources (no re-download):")
+        print("     rmv_source 7              # Switch to RMSX")
+        print("     rmv_motifs                # Fetch RMSX data (same PDB)")
+        print("     rmv_show SARCIN-RICIN     # View RMSX sarcin-ricin motifs")
+        print()
+        print("  3. Multi-source compare:")
+        print("     rmv_source 3")
+        print("     rmv_motifs                # BGSU motifs → SARCIN_RICIN_ALL_S3")
+        print("     rmv_source 7")
+        print("     rmv_motifs                # RMSX motifs → SARCIN_RICIN_ALL_S7")
+        print("     align SARCIN_RICIN_3_S3, SARCIN_RICIN_3_S7")
+        print()
+        print("  4. Label chain ID mode:")
+        print("     rmv_fetch 1S72 cif_use_auth=0    # Load with label_asym_id")
+        print("     rmv_source 7")
+        print("     rmv_motifs                        # Chains shown as AA, BA, etc.")
+        print()
+        print("  5. Save specific instance:")
+        print("     rmv_save HL 1              Save hairpin loop instance #1")
+        print("     rmv_save current           Save current view (high-res)")
+        print()
+
+    def get_available_motifs(self):
+        """Get list of available motif types for current PDB."""
+        loaded_motifs = self.viz_manager.motif_loader.get_loaded_motifs()
+        return list(loaded_motifs.keys()) if loaded_motifs else []
+    
+    def print_motif_summary(self):
+        """Print detailed motif summary table to console."""
+        info = self.viz_manager.get_structure_info()
+        
+        # If no info from viz_manager, check if we loaded via rmv_fetch
+        if not info.get('pdb_id') and not self.loaded_pdb_id:
+            print("\nNo structure loaded. Use 'rmv_fetch <PDB_ID>' or 'rmv_load <PDB_ID>' first.\n")
+            return
+        
+        # Use viz_manager info if available, otherwise use our stored data
+        pdb_id = info.get('pdb_id') or self.loaded_pdb_id
+        motifs = info.get('motifs', {})
+        
+        if not motifs:
+            print(f"\nNo motifs loaded for {pdb_id}.\n")
+            return
+        
+        # Determine the database name to display based on current source mode
+        source_names = {
+            'atlas': 'RNA 3D Motif Atlas (Local)',
+            'rfam': 'Rfam (Local)',
+            'bgsu_api': 'BGSU RNA 3D Hub (API)',
+            'rfam_api': 'Rfam (API)',
+            'fr3d': 'FR3D User Annotations',
+            'rnamotifscan': 'RNAMotifScan User Annotations',
+            'rnamotifscanx': 'RNAMotifScanX User Annotations',
+        }
+        
+        database_id = "Unknown"
+        
+        # Determine database name based on current source mode
+        if self.current_source_mode == 'user':
+            if self.current_user_tool:
+                tool_display_names = {
+                    'fr3d': 'FR3D User Annotations',
+                    'rnamotifscan': 'RMS (RNAMotifScan) User Annotations',
+                    'rnamotifscanx': 'RMSX (RNAMotifScanX) User Annotations'
+                }
+                database_id = tool_display_names.get(self.current_user_tool, f"{self.current_user_tool} User Annotations")
+            else:
+                database_id = "User Annotations"
+        
+        elif self.current_source_mode == 'local':
+            if self.current_local_source:
+                database_id = source_names.get(self.current_local_source, f"{self.current_local_source} (Local)")
+            else:
+                database_id = 'Local Databases (Atlas + Rfam)'
+        
+        elif self.current_source_mode == 'web':
+            if self.current_web_source:
+                database_id = source_names.get(self.current_web_source, f"{self.current_web_source} (API)")
+            else:
+                database_id = 'Online APIs'
+        
+        elif self.current_source_mode == 'auto':
+            database_id = 'Auto-selected (Local First → API)'
+        
+        elif self.current_source_mode == 'combine':
+            database_id = 'Combined (Multiple Sources)'
+        
+        # Fallback: map provider_id if available
+        if database_id == "Unknown":
+            provider_id = info.get('database_id')
+            if provider_id:
+                database_id = source_names.get(provider_id, provider_id)
+        
+        # Use the visualization manager's summary printer
+        self.viz_manager._print_motif_summary_table(pdb_id, motifs, database_id)
+    
+    def show_motif_summary_for_type(self, motif_type: str):
+        """Print summary of a specific motif type without rendering.
+        
+        Args:
+            motif_type (str): Motif type to show (e.g., 'HL', 'IL', 'GNRA')
+        """
+        motif_arg = motif_type.upper().strip()
+        
+        # Use the same data source as rmv_show uses
+        loaded_motifs = self.viz_manager.motif_loader.get_loaded_motifs()
+        
+        if not loaded_motifs:
+            print("\nNo motifs loaded. Use 'rmv_fetch <PDB_ID>' first.\n")
+            return
+        
+        if motif_arg not in loaded_motifs:
+            available = ', '.join(loaded_motifs.keys())
+            print(f"\nMotif type '{motif_arg}' not loaded.")
+            print(f"Available motifs: {available}\n")
+            return
+        
+        # Get motif details from loaded_motifs (same structure as rmv_show uses)
+        motif_info = loaded_motifs[motif_arg]
+        motif_details = motif_info.get('motif_details', [])
+        
+        # Use the visualization manager's table printer (same as rmv_show)
+        self.viz_manager._print_motif_instance_table(motif_arg, motif_details)
+        
+        print("\n  Next steps:")
+        print(f"    rmv_show {motif_arg}              Highlight & render {motif_arg}")
+        print(f"    rmv_summary {motif_arg} <NO>      Show details of specific instance")
+        print("="*70)
+        print()
+    
+    def show_motif_instance_summary(self, motif_type: str, instance_no: int):
+        """Print details of a specific motif instance (for rmv_summary MOTIF NO).
+        
+        Args:
+            motif_type (str): Motif type (e.g., 'HL')
+            instance_no (int): Instance number (1-indexed)
+        """
+        motif_arg = motif_type.upper().strip()
+        
+        # Use the same data source as rmv_show uses
+        loaded_motifs = self.viz_manager.motif_loader.get_loaded_motifs()
+        
+        if not loaded_motifs:
+            print("\nNo motifs loaded. Use 'rmv_fetch <PDB_ID>' first.\n")
+            return
+        
+        if motif_arg not in loaded_motifs:
+            available = ', '.join(loaded_motifs.keys())
+            print(f"\nMotif type '{motif_arg}' not loaded.")
+            print(f"Available motifs: {available}\n")
+            return
+        
+        # Get motif details
+        motif_info = loaded_motifs[motif_arg]
+        motif_details = motif_info.get('motif_details', [])
+        
+        # Check instance number is valid
+        if instance_no < 1 or instance_no > len(motif_details):
+            print(f"\nInstance {instance_no} not found. Valid range: 1-{len(motif_details)}\n")
+            return
+        
+        # Get the specific instance (1-indexed)
+        detail = motif_details[instance_no - 1]
+        
+        # Use the visualization manager's instance detail printer (same as rmv_show uses)
+        self.viz_manager._print_single_instance_info(motif_arg, instance_no, detail)
+        print()
+    
+    def set_source_mode(self, mode: str):
+        """
+        Set the motif data source mode.
+        
+        Args:
+            mode (str): Source mode: auto, local, web, bgsu, rfam, all, user
+        """
+        try:
+            mode_lower = mode.lower()
+            
+            # Handle user annotations specially
+            if mode_lower == 'user':
+                self._set_user_annotations_source()
+                return
+            
+            from .database import get_config, SourceMode
+            
+            mode_map = {
+                'auto': SourceMode.AUTO,
+                'local': SourceMode.LOCAL,
+                'web': SourceMode.AUTO,        # web mode uses AUTO (smart selection)
+                'bgsu': SourceMode.BGSU,
+                'rfam': SourceMode.RFAM,
+                'all': SourceMode.ALL
+            }
+            
+            if mode_lower not in mode_map:
+                valid_modes = ['auto', 'local', 'web', 'web bgsu', 'web rfam', 'local atlas', 'local rfam', 'all', 'user fr3d', 'user rnamotifscan', 'user rnamotifscanx']
+                self.logger.error(f"Invalid source mode '{mode}'.")
+                self.logger.info("Valid source modes:")
+                for m in valid_modes:
+                    self.logger.info(f"  rmv_source {m}")
+                return
+            
+            config = get_config()
+            config.source_mode = mode_map[mode_lower]
+            
+            # BUG FIX: Clear specific_source when using generic modes (auto, all)
+            # Note: specific source handlers (_handle_local_source_by_id, etc.) set this explicitly
+            if mode_lower in ['auto', 'all']:
+                config.specific_source = None
+            
+            mode_display = mode_lower if mode_lower != 'web' else 'web (auto-select online APIs)'
+            self.logger.success(f"Motif source mode set to: {mode_display}")
+            self._print_source_mode_info()
+            
+            # Print follow-up suggestions
+            print("\n  Next steps:")
+            if self.loaded_pdb_id:
+                print(f"    rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+            else:
+                print(f"    rmv_fetch <PDB_ID>         Load PDB structure")
+                print(f"    rmv_motifs                 Fetch motif data")
+            print()
+            
+        except Exception as e:
+            self.logger.error(f"Failed to set source mode: {e}")
+    
+    def _set_user_annotations_source(self):
+        """Set source to user annotations with tool selection."""
+        print("\n" + "="*60)
+        print("USER ANNOTATIONS")
+        print("="*60)
+        print("\nAvailable tools:")
+        print("  1. fr3d           - FR3D output format (BGSU base pairs)")
+        print("  2. rnamotifscan   - RNAMotifScan output format (RMS)")
+        print("  3. rnamotifscanx  - RNAMotifScanX output format (RMSX)")
+        print("\nAfter selecting a tool with rmv_source user <TOOL>,")
+        print("use rmv_fetch to load structures:")
+        print("\nUsage:")
+        print("  rmv_fetch <PDB_ID>")
+        print("\nExample:")
+        print("  rmv_fetch 1S72")
+        print("="*60 + "\n")
+        
+        # Store that user annotations are selected
+        self.current_source_mode = 'user'
+        self.logger.success("User Annotations mode selected")
+        self.logger.info("Use: rmv_fetch <PDB_ID>")
+        self.logger.info("Tools: fr3d, rnamotifscan, rnamotifscanx")
+    
+    def _print_source_mode_info(self):
+        """Print information about current source mode."""
+        try:
+            from .database import get_config, SourceMode
+            
+            config = get_config()
+            mode = config.source_mode
+            
+            mode_descriptions = {
+                SourceMode.AUTO: "Automatically select best available source (local first, then API)",
+                SourceMode.LOCAL: "Use only local bundled databases (offline mode)",
+                SourceMode.BGSU: "Use only BGSU RNA 3D Hub API (online, ~3000+ PDBs)",
+                SourceMode.RFAM: "Use only Rfam API (online, named motifs)",
+                SourceMode.ALL: "Combine all sources (comprehensive, may have duplicates)"
+            }
+            
+            print(f"\nCurrent mode: {mode.value}")
+            print(f"Description: {mode_descriptions.get(mode, 'Unknown')}")
+            
+        except ImportError:
+            print("Source selector not available")
+    
+    def _handle_source_by_id(self, source_id: int, extra_args: str = None):
+        """Handle source selection by ID number with support for custom P-values.
+        
+        Also detects multi-source mode when extra_args contains additional
+        numeric source IDs (e.g., 'rmv_source 1 3' or 'rmv_source 2 5 3').
+        
+        Args:
+            source_id (int): Source ID (1-7)
+            extra_args (str): Optional arguments:
+                - Additional source IDs for multi-source combine (e.g., "3" or "5 3")
+                - "off" : disable filtering (for RMS/RMSX only)
+                - "on"  : enable filtering (for RMS/RMSX only)
+                - "MOTIF_NAME p_value MOTIF_NAME2 p_value2 ..." : custom P-values
+        """
+        if source_id not in SOURCE_ID_MAP:
+            self.logger.error(f"Invalid source ID: {source_id}")
+            self.logger.error("Valid source IDs:")
+            for sid, info in SOURCE_ID_MAP.items():
+                self.logger.error(f"  {sid} = {info['name']}")
+            return
+        
+        # --- Multi-source detection ---
+        # If extra_args contains ONLY numeric source IDs, enter combine mode.
+        # e.g., rmv_source 1 3 -> source_id=1, extra_args='3'
+        # e.g., rmv_source 2 5 3 -> source_id=2, extra_args='5 3'
+        if extra_args:
+            extra_parts = str(extra_args).strip().split()
+            all_numeric = all(p.isdigit() for p in extra_parts)
+            if all_numeric and extra_parts:
+                # All extra args are numbers -> multi-source combine mode
+                all_ids = [source_id] + [int(p) for p in extra_parts]
+                # Validate all IDs
+                invalid = [sid for sid in all_ids if sid not in SOURCE_ID_MAP]
+                if invalid:
+                    self.logger.error(f"Invalid source ID(s): {invalid}")
+                    self.logger.error("Valid source IDs: " + 
+                                     ", ".join(f"{k}={v['name']}" for k, v in SOURCE_ID_MAP.items()))
+                    return
+                if len(all_ids) != len(set(all_ids)):
+                    self.logger.error("Duplicate source IDs not allowed")
+                    return
+                # Enter combine mode
+                self._handle_multi_source(all_ids)
+                return
+        
+        # Store the numeric source ID for object tagging
+        self.current_source_id = source_id
+        
+        source_info = SOURCE_ID_MAP[source_id]
+        source_type = source_info['type']
+        
+        # Handle different source types (single source mode)
+        if source_type == 'local':
+            self._handle_local_source_by_id(source_id, source_info, extra_args)
+        elif source_type == 'web':
+            self._handle_web_source_by_id(source_id, source_info, extra_args)
+        elif source_type == 'user':
+            self._handle_user_source_by_id(source_id, source_info, extra_args)
+        else:
+            self.logger.error(f"Unknown source type: {source_type}")
+    
+    def _handle_multi_source(self, source_ids: list):
+        """Handle multi-source combine mode.
+        
+        Called when user provides multiple source IDs:
+            rmv_source 1 3     -> source_ids=[1, 3]
+            rmv_source 2 5 3   -> source_ids=[2, 5, 3]
+        
+        Priority order = left to right (first = highest priority).
+        
+        Args:
+            source_ids: List of source IDs in priority order
+        """
+        self.combined_source_ids = source_ids
+        self.current_source_mode = 'combine'
+        self.current_local_source = None
+        self.current_web_source = None
+        self.current_user_tool = None
+        # Use combined IDs joined for suffix (e.g., S1_3 for sources 1+3)
+        self.current_source_id = '_'.join(str(s) for s in source_ids)
+        
+        # Clear specific_source in config
+        from .database import get_config
+        config = get_config()
+        config.specific_source = None
+        
+        # Display what we're combining
+        self.logger.success(f"Multi-source combine mode: {len(source_ids)} sources")
+        for i, sid in enumerate(source_ids, 1):
+            info = SOURCE_ID_MAP[sid]
+            priority = "HIGHEST" if i == 1 else ("LOWEST" if i == len(source_ids) else f"#{i}")
+            # Show p-value status for RMS/RMSX
+            pval_note = ""
+            tool = info.get('tool', '')
+            if tool in ['rms', 'rnamotifscan']:
+                if self.user_rms_custom_pvalues:
+                    pv = ", ".join(f"{m}={p}" for m, p in self.user_rms_custom_pvalues.items())
+                    pval_note = f" | P-values: {pv}"
+                else:
+                    fs = "ON" if self.user_rms_filtering_enabled else "OFF"
+                    pval_note = f" | Filtering: {fs}"
+            elif tool in ['rmsx', 'rnamotifscanx']:
+                if self.user_rmsx_custom_pvalues:
+                    pv = ", ".join(f"{m}={p}" for m, p in self.user_rmsx_custom_pvalues.items())
+                    pval_note = f" | P-values: {pv}"
+                else:
+                    fs = "ON" if self.user_rmsx_filtering_enabled else "OFF"
+                    pval_note = f" | Filtering: {fs}"
+            self.logger.info(f"  {i}. [{sid}] {info['name']} (priority: {priority}){pval_note}")
+        
+        self.logger.info("")
+        self.logger.info("Features: Homolog enrichment + Cascade merge")
+        self.logger.info("Tip: Configure P-values first with 'rmv_source 6 MOTIF 0.05', then combine.")
+        if self.loaded_pdb_id:
+            self.logger.info(f"Use 'rmv_motifs' to load, enrich, and merge data for {self.loaded_pdb_id}")
+        else:
+            self.logger.info("Use 'rmv_fetch <PDB_ID>' to load structure, then 'rmv_motifs' for data")
+    
+    def _handle_local_source_by_id(self, source_id: int, source_info: Dict, extra_args: str = None):
+        """Handle local source selection by ID."""
+        subtype = source_info.get('subtype')
+        
+        self.current_source_mode = 'local'
+        self.current_local_source = subtype
+        self.current_web_source = None
+        self.current_user_tool = None
+        self.combined_source_ids = []
+        
+        # BUG FIX: Set specific_source in config to ensure ONLY this source is used
+        from .database import get_config
+        config = get_config()
+        config.specific_source = subtype  # e.g., 'atlas' for source 1
+        
+        self.set_source_mode('local')
+        self.logger.debug(f"Set config.specific_source = {subtype}")
+        self.logger.success(f"Source {source_id}: {source_info['name']}")
+        self.logger.info(f"Coverage: {source_info['coverage']}")
+        self.logger.info(f"Type: {source_info['description']}")
+        
+        # VERIFICATION: Print source configuration
+        self.logger.debug(f"SOURCE CONFIG VERIFICATION:")
+        self.logger.debug(f"  - self.current_source_mode = {self.current_source_mode}")
+        self.logger.debug(f"  - self.current_local_source = {self.current_local_source}")
+        self.logger.debug(f"  - config.specific_source = {config.specific_source}")
+        self.logger.debug(f"  - Expected to load from: {subtype} ONLY")
+        
+        self.logger.info("\nNext steps:")
+        if self.loaded_pdb_id:
+            self.logger.info(f"  rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+        else:
+            self.logger.info("  rmv_fetch <PDB_ID>         Load PDB structure")
+            self.logger.info("  rmv_motifs                 Fetch motif data")
+        self.logger.info("  rmv_summary                Show available motifs")
+        self.logger.info("  rmv_show <MOTIF_TYPE>      Render motif on structure")
+    
+    def _handle_web_source_by_id(self, source_id: int, source_info: Dict, extra_args: str = None):
+        """Handle online source selection by ID."""
+        subtype = source_info.get('subtype')
+        
+        self.current_source_mode = 'web'
+        self.current_web_source = subtype
+        self.current_local_source = None
+        self.current_user_tool = None
+        self.combined_source_ids = []
+        
+        # BUG FIX: Set specific_source in config to ensure ONLY this source is used
+        from .database import get_config
+        config = get_config()
+        # Map subtype to provider ID
+        subtype_to_provider = {'bgsu': 'bgsu_api', 'rfam_api': 'rfam_api'}
+        provider_id = subtype_to_provider.get(subtype, subtype)
+        config.specific_source = provider_id
+        
+        # Map subtype to SourceMode
+        mode_map = {'bgsu': 'bgsu', 'rfam_api': 'rfam'}
+        mode = mode_map.get(subtype, 'auto')
+        self.set_source_mode(mode)
+        self.logger.debug(f"Set config.specific_source = {provider_id} (from subtype={subtype})")
+        
+        self.logger.success(f"Source {source_id}: {source_info['name']}")
+        self.logger.info(f"Coverage: {source_info['coverage']}")
+        self.logger.info(f"Type: {source_info['description']}")
+        
+        # VERIFICATION: Print source configuration
+        self.logger.debug(f"SOURCE CONFIG VERIFICATION:")
+        self.logger.debug(f"  - self.current_source_mode = {self.current_source_mode}")
+        self.logger.debug(f"  - self.current_web_source = {self.current_web_source}")
+        self.logger.debug(f"  - config.specific_source = {config.specific_source}")
+        self.logger.debug(f"  - Expected to load from: {provider_id} ONLY")
+        
+        self.logger.info("\nNext steps:")
+        if self.loaded_pdb_id:
+            self.logger.info(f"  rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+        else:
+            self.logger.info("  rmv_fetch <PDB_ID>         Load PDB structure")
+            self.logger.info("  rmv_motifs                 Fetch motif data")
+        self.logger.info("  rmv_summary                Show available motifs")
+        self.logger.info("  rmv_show <MOTIF_TYPE>      Render motif on structure")
+    
+    def _handle_user_source_by_id(self, source_id: int, source_info: Dict, extra_args: str = None):
+        """Handle user annotation source selection by ID.
+        
+        Supports:
+        - rmv_source 6          (RMS with default filtering ON)
+        - rmv_source 6 off      (RMS with filtering OFF)
+        - rmv_source 6 on       (RMS with filtering ON - explicit)
+        - rmv_source 6 C-LOOP 0.05 KINK-TURN 0.02  (RMS with custom P-values)
+        """
+        tool = source_info.get('tool')
+        
+        if not tool:
+            self.logger.error(f"Source {source_id} is not a user annotation source")
+            return
+        
+        self.current_source_mode = 'user'
+        self.current_user_tool = tool
+        self.current_local_source = None
+        self.current_web_source = None
+        self.combined_source_ids = []
+        
+        # BUG FIX: Clear specific_source for user annotation sources (they use tool-based loading)
+        from .database import get_config
+        config = get_config()
+        config.specific_source = None
+        
+        # Parse extra arguments
+        custom_pvalues = {}
+        filtering_enabled = True  # Default: ON
+        
+        if extra_args:
+            parts = str(extra_args).strip().split()
+            
+            # Check if first arg is on/off
+            if len(parts) > 0 and parts[0].lower() in ['on', 'off']:
+                filtering_enabled = (parts[0].lower() == 'on')
+                parts = parts[1:]  # Remove the on/off argument
+            
+            # Parse remaining arguments as custom P-values (MOTIF_NAME p_value pairs)
+            if len(parts) > 0:
+                # Check if this looks like P-value arguments
+                i = 0
+                while i < len(parts):
+                    if i + 1 < len(parts):
+                        try:
+                            pvalue = float(parts[i + 1])
+                            motif_name = parts[i].upper()
+                            custom_pvalues[motif_name] = pvalue
+                            i += 2
+                        except ValueError:
+                            # Not a float, skip this pair
+                            i += 1
+                    else:
+                        i += 1
+        
+        # Store filtering state and custom P-values
+        if tool in ['rms', 'rnamotifscan']:
+            self.user_rms_filtering_enabled = filtering_enabled
+            self.user_rms_custom_pvalues = custom_pvalues
+        elif tool in ['rmsx', 'rnamotifscanx']:
+            self.user_rmsx_filtering_enabled = filtering_enabled
+            self.user_rmsx_custom_pvalues = custom_pvalues
+        
+        # Build status message
+        status_msg = f"Source {source_id}: {source_info['name']}"
+        if tool in ['rms', 'rnamotifscan', 'rmsx', 'rnamotifscanx']:
+            if custom_pvalues:
+                pvalue_str = ", ".join([f"{m}={p}" for m, p in custom_pvalues.items()])
+                status_msg += f" | Custom P-values: {pvalue_str}"
+            else:
+                filter_status = "Filtering: ON" if filtering_enabled else "Filtering: OFF"
+                status_msg += f" | {filter_status}"
+        
+        self.logger.success(status_msg)
+        
+        self.logger.info("\nNext steps:")
+        if self.loaded_pdb_id:
+            self.logger.info(f"  rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+        else:
+            self.logger.info("  rmv_fetch <PDB_ID>         Load PDB structure")
+            self.logger.info("  rmv_motifs                 Fetch motif data")
+        self.logger.info("  rmv_summary                Show available motifs")
+        self.logger.info("  rmv_show <MOTIF_TYPE>      Render motif on structure")
+    
+    def _handle_source_info_command(self, source_id_str: str = None):
+        """Display comprehensive information about a source.
+        
+        Usage:
+            rmv_source info 1  - Show detailed info about source 1
+            rmv_source info    - Show info for all sources
+        """
+        if not source_id_str:
+            # Show info for all sources
+            self._print_all_source_info()
+            return
+        
+        try:
+            source_id = int(source_id_str.strip())
+            self._print_single_source_info(source_id)
+        except ValueError:
+            self.logger.error(f"Invalid source ID: {source_id_str}")
+            self.logger.error("Usage: rmv_source info <ID> or rmv_sources")
+    
+    def _print_single_source_info(self, source_id: int):
+        """Print detailed information about a single source."""
+        if source_id not in SOURCE_ID_MAP:
+            self.logger.error(f"Source ID {source_id} not found")
+            return
+        
+        info = SOURCE_ID_MAP[source_id]
+        
+        print("\n" + "="*70)
+        print(f"  SOURCE {source_id}: {info['name'].upper()}")
+        print("="*70)
+        
+        print(f"\nDescription:  {info['description']}")
+        print(f"Category:     {info.get('category', 'N/A')}")
+        print(f"Coverage:     {info['coverage']}")
+        print(f"Type:         {info['type'].upper()}")
+        
+        # Source-specific information
+        if info['type'] == 'user':
+            print(f"\nAvailable motif types will be shown after loading a structure")
+            print(f"with rmv_fetch <PDB_ID>")
+        
+        # Display sample commands
+        print(f"\nSample commands:")
+        print(f"  rmv_source {source_id}           Select this source")
+        print(f"  rmv_fetch 1S72                  Load structure")
+        print(f"  rmv_summary                     Show available motifs")
+        print(f"  rmv_show HL                     Render motif")
+        
+        # RMS/RMSX specific features
+        if info.get('supports_filtering'):
+            print(f"\nWith filtering control:")
+            print(f"  rmv_source {source_id} off        Disable filtering (show all motifs)")
+            print(f"  rmv_source {source_id} on         Enable filtering (default)")
+            print(f"\nWith custom P-values:")
+            print(f"  rmv_source {source_id} C-LOOP 0.05 KINK-TURN 0.02")
+            print(f"    → Apply custom thresholds for specific motif types")
+            print(f"    → Other motif types use default thresholds")
+        
+        print("\n" + "="*70 + "\n")
+    
+    def _print_all_source_info(self):
+        """Print summary info for all sources."""
+        print("\n" + "="*70)
+        print("  AVAILABLE DATA SOURCES (Quick Reference)")
+        print("="*70)
+        
+        current_category = None
+        for source_id in sorted(SOURCE_ID_MAP.keys()):
+            info = SOURCE_ID_MAP[source_id]
+            
+            if info.get('category') != current_category:
+                current_category = info.get('category')
+                print(f"\n{current_category}:")
+                print("-" * 70)
+            
+            print(f"  [{source_id}] {info['name']:30} | {info['coverage']:20} | {info['description']}")
+        
+        print("\n" + "="*70)
+        print("Usage:")
+        print("  rmv_source <ID>                Select source by ID")
+        print("  rmv_source info <ID>           Show detailed info")
+        print("  rmv_sources                    List all sources (this display)")
+        print("="*70 + "\n")
+    
+    def _handle_user_source(self, tool_name):
+        """Handle user annotations source selection."""
+        if not tool_name:
+            self.logger.error("Usage: rmv_source user <tool_name> [on|off]")
+            self.logger.error("Available tools:")
+            self.logger.error("  rmv_source user fr3d")
+            self.logger.error("  rmv_source user rms [on|off]          (default: on)")
+            self.logger.error("  rmv_source user rmsx [on|off]         (default: on)")
+            return
+        
+        # Parse tool name and optional on/off parameter
+        parts = str(tool_name).strip().split()
+        tool = parts[0].lower()
+        filtering_enabled = True  # Default: filters ON
+        
+        # Check for optional on/off parameter (only for rms and rmsx)
+        if len(parts) > 1:
+            filter_arg = parts[1].lower()
+            if filter_arg in ['on', 'off']:
+                filtering_enabled = (filter_arg == 'on')
+            else:
+                self.logger.warning(f"Unknown parameter '{filter_arg}'. Expected 'on' or 'off'. Using default: on")
+        
+        valid_tools = ['fr3d', 'rnamotifscan', 'rms', 'rnamotifscanx', 'rmsx']
+        if tool not in valid_tools:
+            self.logger.error(f"Invalid tool '{tool}'. Valid options: {', '.join(valid_tools)}")
+            return
+        
+        # Store filtering state for RMS and RMSX
+        if tool in ['rms', 'rnamotifscan']:
+            self.user_rms_filtering_enabled = filtering_enabled
+        elif tool in ['rmsx', 'rnamotifscanx']:
+            self.user_rmsx_filtering_enabled = filtering_enabled
+        
+        self.current_source_mode = 'user'
+        self.current_user_tool = tool
+        self.current_local_source = None
+        self.current_web_source = None
+        
+        tool_descriptions = {
+            'fr3d': 'FR3D (BGSU base pair annotations)',
+            'rnamotifscan': 'RNAMotifScan (RMS - structural motif search)',
+            'rms': 'RNAMotifScan (RMS - structural motif search)',
+            'rnamotifscanx': 'RNAMotifScanX (RMSX - extended motif search)',
+            'rmsx': 'RNAMotifScanX (RMSX - extended motif search)'
+        }
+        
+        # Build status message
+        status_msg = f"Source set to user annotations: {tool_descriptions.get(tool, tool)}"
+        if tool in ['rms', 'rnamotifscan', 'rmsx', 'rnamotifscanx']:
+            filter_status = "Filtering: ON (default cutoffs applied)" if filtering_enabled else "Filtering: OFF (all motifs shown)"
+            status_msg += f" | {filter_status}"
+        
+        self.logger.success(status_msg)
+        
+        # Print next steps
+        self.logger.info("")
+        self.logger.info("Next steps:")
+        if self.loaded_pdb_id:
+            self.logger.info(f"  rmv_motifs                 Fetch motif data for {self.loaded_pdb_id}")
+        else:
+            self.logger.info("  rmv_fetch <PDB_ID>         Load PDB structure")
+            self.logger.info("  rmv_motifs                 Fetch motif data")
+        self.logger.info("  rmv_summary                Show available motifs")
+        self.logger.info("  rmv_show <MOTIF_TYPE>      Render motif on structure")
+        self.logger.info("")
+    
+    def _handle_local_source(self, source_name):
+        """Handle local source selection."""
+        if not source_name:
+            # Just 'rmv_source local' - use local (both atlas and rfam)
+            self.current_source_mode = 'local'
+            self.current_local_source = None
+            self.current_web_source = None
+            self.current_user_tool = None
+            self.set_source_mode('local')
+            self.logger.info("Using local sources (RNA 3D Atlas + Rfam database)")
+            return
+        
+        # For specific local sources
+        if source_name == 'atlas':
+            self.current_source_mode = 'local'
+            self.current_local_source = 'atlas'
+            self.current_web_source = None
+            self.current_user_tool = None
+            self.set_source_mode('local')
+            self.logger.success("Source set to local RNA 3D Atlas")
+        elif source_name == 'rfam':
+            self.current_source_mode = 'local'
+            self.current_local_source = 'rfam'
+            self.current_web_source = None
+            self.current_user_tool = None
+            self.set_source_mode('local')
+            self.logger.success("Source set to local Rfam database")
+        else:
+            self.logger.error(f"Invalid local source '{source_name}'")
+            self.logger.error("Valid local sources: atlas, rfam")
+    
+    def _handle_web_source(self, source_name):
+        """Handle web/online source selection."""
+        if not source_name:
+            # Just 'rmv_source web' - use smart web source selection
+            self.current_source_mode = 'web'
+            self.current_web_source = None
+            self.current_local_source = None
+            self.current_user_tool = None
+            self.set_source_mode('web')
+            self.logger.info("Using online sources (auto-select between BGSU and Rfam APIs)")
+            return
+        
+        # For specific online sources
+        if source_name == 'bgsu':
+            self.current_source_mode = 'web'
+            self.current_web_source = 'bgsu_api'
+            self.current_local_source = None
+            self.current_user_tool = None
+            self.set_source_mode('bgsu')
+            self.logger.success("Source set to BGSU RNA 3D Hub API (~3000+ PDBs)")
+        elif source_name == 'rfam':
+            self.current_source_mode = 'web'
+            self.current_web_source = 'rfam_api'
+            self.current_local_source = None
+            self.current_user_tool = None
+            self.set_source_mode('rfam')
+            self.logger.success("Source set to Rfam API (named motifs)")
+        else:
+            self.logger.error(f"Invalid online source '{source_name}'")
+            self.logger.error("Valid online sources: bgsu, rfam")
+    
+    def _handle_combine_sources(self, source_ids_str: str):
+        """Handle combining multiple sources.
+        
+        Args:
+            source_ids_str: Space-separated source IDs (e.g., "1 3" or "2 5")
+        """
+        if not source_ids_str:
+            self.logger.error("Usage: rmv_source combine <ID1> <ID2> [<ID3> ...]")
+            self.logger.error("Example: rmv_source combine 1 3    (combine Atlas + BGSU)")
+            self.logger.error("Valid source IDs:")
+            self.logger.error("  1 = RNA 3D Atlas (Local)")
+            self.logger.error("  2 = Rfam (Local)")
+            self.logger.error("  3 = BGSU RNA 3D Hub (Online)")
+            self.logger.error("  4 = Rfam API (Online)")
+            self.logger.error("  5 = FR3D Annotations (User)")
+            self.logger.error("  6 = RNAMotifScan (User)")
+            return
+        
+        # Parse source IDs
+        try:
+            source_ids = [int(sid.strip()) for sid in source_ids_str.split()]
+        except ValueError:
+            self.logger.error(f"Invalid source IDs: '{source_ids_str}'")
+            self.logger.error("IDs must be integers (1-6)")
+            return
+        
+        # Validate source IDs
+        try:
+            from .database.source_registry import get_source_registry
+            registry = get_source_registry()
+            is_valid, msg = registry.validate_source_ids(source_ids)
+            
+            if not is_valid:
+                self.logger.error(msg)
+                return
+            
+            # Store combined source IDs
+            self.combined_source_ids = source_ids
+            self.current_source_mode = 'combine'
+            self.current_local_source = None
+            self.current_web_source = None
+            self.current_user_tool = None
+            
+            # BUG FIX: Clear specific_source when combining multiple sources
+            from .database import get_config
+            config = get_config()
+            config.specific_source = None
+            
+            # Display what we're combining
+            source_names = registry.get_source_descriptions(source_ids)
+            self.logger.success(f"Combining {len(source_ids)} sources:")
+            for i, name in enumerate(source_names, 1):
+                self.logger.info(f"  {i}. {name}")
+            
+            self.logger.info("Use 'rmv_fetch <PDB_ID>' to load and combine data from these sources")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to validate sources: {e}")
+    
+    def refresh_motifs_action(self, pdb_id: str = None):
+        """
+        Force refresh motifs from API (bypass cache).
+        
+        Args:
+            pdb_id (str): PDB ID to refresh (uses current if not specified)
+        """
+        try:
+            info = self.viz_manager.get_structure_info()
+            
+            if not pdb_id:
+                pdb_id = info.get('pdb_id')
+            
+            if not pdb_id:
+                self.logger.error("No PDB ID specified and no structure loaded")
+                return
+            
+            pdb_id = pdb_id.upper()
+            self.logger.info(f"Force refreshing motifs for {pdb_id} from API...")
+            
+            # Clear cache for this PDB
+            from .database import get_source_selector
+            source_selector = get_source_selector()
+            
+            if source_selector:
+                # Pass specific source if one is selected
+                source_override = None
+                if self.current_source_mode == 'local' and self.current_local_source:
+                    source_override = self.current_local_source
+                elif self.current_source_mode == 'web' and self.current_web_source:
+                    web_source_map = {'bgsu': 'bgsu_api', 'rfam_api': 'rfam_api'}
+                    source_override = web_source_map.get(self.current_web_source)
+                
+                motifs, source = source_selector.get_motifs_for_pdb(pdb_id, force_refresh=True, source_override=source_override)
+                
+                if motifs:
+                    total = sum(len(v) for v in motifs.values())
+                    self.logger.success(f"Refreshed {total} motifs from {source}")
+                    
+                    # If this is the currently loaded structure, reload visualization
+                    if info.get('pdb_id') == pdb_id and info.get('structure'):
+                        self.logger.info("Reloading visualization...")
+                        self.viz_manager.reload_with_database(None)
+                else:
+                    self.logger.warning(f"No motifs found for {pdb_id} in any source")
+            else:
+                self.logger.error("Source selector not available - API sources may not be initialized")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to refresh motifs: {e}")
+    
+    def print_source_info(self):
+        """Print only the ACTIVE data source and its details."""
+        print("\n" + "="*70)
+        print("  ACTIVE DATA SOURCE")
+        print("="*70)
+        
+        # Determine and display the active source
+        if self.current_source_mode == 'user':
+            tool_descriptions = {
+                'fr3d': 'FR3D (BGSU base pair annotations)',
+                'rnamotifscan': 'RNAMotifScan (RMS - structural motif search)',
+                'rms': 'RNAMotifScan (RMS - structural motif search)',
+                'rnamotifscanx': 'RNAMotifScanX (RMSX - extended motif search)',
+                'rmsx': 'RNAMotifScanX (RMSX - extended motif search)',
+            }
+            tool_name = self.current_user_tool or 'unknown'
+            description = tool_descriptions.get(tool_name, tool_name)
+            print(f"\n  Mode: USER ANNOTATIONS")
+            print(f"  Tool: {description}")
+            print(f"\n  Status: Ready to load structures")
+            print(f"  Command: rmv_fetch <PDB_ID>")
+            
+        elif self.current_source_mode == 'local':
+            if self.current_local_source == 'atlas':
+                print(f"\n  Mode: LOCAL DATABASE")
+                print(f"  Source: RNA 3D Motif Atlas Only")
+                print(f"  Coverage: 759 PDB structures")
+                print(f"  Type: Offline (no internet required)")
+            elif self.current_local_source == 'rfam':
+                print(f"\n  Mode: LOCAL DATABASE")
+                print(f"  Source: Rfam Database Only")
+                print(f"  Coverage: 173 PDB structures")
+                print(f"  Type: Offline (no internet required)")
+            else:
+                print(f"\n  Mode: LOCAL DATABASE")
+                print(f"  Source: RNA 3D Atlas + Rfam (combined)")
+                print(f"  Coverage: 759+ PDB structures")
+                print(f"  Type: Offline (no internet required)")
+            print(f"\n  Status: Ready to load structures")
+            print(f"  Command: rmv_fetch <PDB_ID>")
+            
+        elif self.current_source_mode == 'web':
+            if self.current_web_source == 'bgsu_api':
+                print(f"\n  Mode: ONLINE API")
+                print(f"  Source: BGSU RNA 3D Hub")
+                print(f"  Coverage: ~3000+ PDB structures")
+                print(f"  Type: Online (requires internet)")
+            elif self.current_web_source == 'rfam_api':
+                print(f"\n  Mode: ONLINE API")
+                print(f"  Source: Rfam API")
+                print(f"  Coverage: All Rfam motifs")
+                print(f"  Type: Online (requires internet)")
+            else:
+                print(f"\n  Mode: ONLINE API")
+                print(f"  Source: Auto-select (BGSU or Rfam)")
+                print(f"  Coverage: ~3000+ PDB structures")
+                print(f"  Type: Online (requires internet)")
+            print(f"\n  Status: Ready to load structures")
+            print(f"  Command: rmv_fetch <PDB_ID>")
+            
+        elif self.current_source_mode == 'combine':
+            print(f"\n  Mode: COMBINED SOURCES")
+            print(f"  Number of Sources: {len(self.combined_source_ids)}")
+            print(f"  IDs: {', '.join(map(str, self.combined_source_ids))}")
+            print(f"\n  Status: Ready to load structures")
+            print(f"  Command: rmv_fetch <PDB_ID>")
+            
+        else:
+            print(f"\n  Mode: AUTO (DEFAULT)")
+            print(f"  Strategy: Local first → Online if not found")
+            print(f"  Coverage: 759+ PDB structures locally, ~3000+ via API")
+            print(f"  Type: Smart (offline first, online fallback)")
+            print(f"\n  Status: Ready to load structures")
+            print(f"  Command: rmv_fetch <PDB_ID>")
+        
+        print("\n" + "="*70 + "\n")
+
+
+# Global GUI instance
+_gui_instance = None
+gui = None  # Module-level gui reference (set by initialize_gui())
+
+
+def get_gui():
+    """Get or create global GUI instance."""
+    global _gui_instance
+    if _gui_instance is None:
+        _gui_instance = MotifVisualizerGUI()
+    return _gui_instance
+
+
+def initialize_gui():
+    """Initialize GUI and register commands."""
+    global gui
+    gui = get_gui()
+    
+    # Register PyMOL commands
+    def fetch_raw_pdb(pdb_id='', background_color='', cif_use_auth=''):
+        """PyMOL command: Load raw PDB structure only (no motif data).
+        
+        Downloads and loads the PDB/mmCIF structure into PyMOL.
+        Use rmv_source + rmv_motifs after to select source and fetch motif data.
+        
+        Usage:
+            rmv_fetch 1S72                           # Load PDB structure
+            rmv_fetch 1S72, bg_color=lightgray       # With background color
+            rmv_fetch 1S72, cif_use_auth=0           # Use label_asym_id chains
+        
+        Chain ID modes:
+            cif_use_auth=1 (default)  - Use auth_asym_id (0, 9, A, B...)
+            cif_use_auth=0            - Use label_asym_id (AA, BA, CA...)
+        """
+        if not pdb_id:
+            gui.logger.error("Usage: rmv_fetch <PDB_ID> [, bg_color=gray80] [, cif_use_auth=0]")
+            gui.logger.error("Examples:")
+            gui.logger.error("  rmv_fetch 1S72")
+            gui.logger.error("  rmv_fetch 1S72, bg_color=lightgray")
+            gui.logger.error("  rmv_fetch 1S72, cif_use_auth=0    (use label_asym_id)")
+            return
+        
+        pdb_arg = str(pdb_id).strip()
+        bg_arg = str(background_color).strip() if background_color else None
+        
+        # Handle cif_use_auth parameter — may be embedded in pdb_id or bg_color
+        # because PyMOL's cmd.extend doesn't always separate keyword args correctly.
+        # User might type: rmv_fetch 1S72 cif_use_auth=0  (space, no comma)
+        #              or: rmv_fetch 1S72, cif_use_auth=0  (comma-separated)
+        import re
+        cif_auth_val = 1  # Default: auth_asym_id
+        
+        # Extract cif_use_auth= from pdb_id (space-separated case)
+        cif_match = re.search(r'\bcif_use_auth\s*=\s*(\S+)', pdb_arg, re.IGNORECASE)
+        if cif_match:
+            cif_str = cif_match.group(1).strip()
+            if cif_str in ('0', 'off', 'false', 'label'):
+                cif_auth_val = 0
+            pdb_arg = re.sub(r'\s*\bcif_use_auth\s*=\s*\S+', '', pdb_arg, flags=re.IGNORECASE).strip()
+        
+        # Extract bg_color= from pdb_id (space-separated case)
+        bg_match = re.search(r'\bbg_color\s*=\s*(\S+)', pdb_arg, re.IGNORECASE)
+        if bg_match:
+            bg_arg = bg_match.group(1).strip()
+            pdb_arg = re.sub(r'\s*\bbg_color\s*=\s*\S+', '', pdb_arg, flags=re.IGNORECASE).strip()
+        
+        # Extract cif_use_auth= from background_color (comma-separated positional fallback)
+        if bg_arg:
+            cif_match_bg = re.search(r'\bcif_use_auth\s*=\s*(\S+)', bg_arg, re.IGNORECASE)
+            if cif_match_bg:
+                cif_str = cif_match_bg.group(1).strip()
+                if cif_str in ('0', 'off', 'false', 'label'):
+                    cif_auth_val = 0
+                bg_arg = re.sub(r'\s*\bcif_use_auth\s*=\s*\S+', '', bg_arg, flags=re.IGNORECASE).strip()
+                if not bg_arg:
+                    bg_arg = None
+        
+        # Also check the explicit keyword argument
+        if cif_use_auth:
+            cif_str = str(cif_use_auth).strip()
+            if cif_str in ('0', 'off', 'false', 'label'):
+                cif_auth_val = 0
+            elif cif_str in ('1', 'on', 'true', 'auth'):
+                cif_auth_val = 1
+        
+        # Validate PDB ID after stripping parameters
+        if not pdb_arg or len(pdb_arg) != 4 or not pdb_arg.isalnum():
+            gui.logger.error(f"Invalid PDB ID: '{pdb_arg}'")
+            gui.logger.error("PDB ID must be exactly 4 alphanumeric characters (e.g., 1S72)")
+            return
+        
+        gui.cif_use_auth = cif_auth_val
+        
+        # Load the structure using PyMOL's fetch command
+        try:
+            # Structure name is just the PDB ID (no source suffix)
+            # Source-tagged naming only applies to motif objects
+            structure_name = pdb_arg.lower()
+            
+            # Set cif_use_auth before fetching
+            try:
+                cmd.set("cif_use_auth", cif_auth_val)
+            except Exception:
+                pass
+            
+            # Set background color if specified
+            if bg_arg:
+                cmd.bg_color(bg_arg)
+            
+            # Delete any existing object with the same name
+            try:
+                cmd.delete(structure_name)
+            except:
+                pass
+            cmd.fetch(pdb_arg, structure_name)
+            
+            # Store loaded PDB info
+            gui.loaded_pdb = structure_name
+            gui.loaded_pdb_id = pdb_arg.upper()
+            
+            # Set structure_loader fields
+            gui.viz_manager.structure_loader.current_structure = structure_name
+            gui.viz_manager.structure_loader.current_pdb_id = pdb_arg.upper()
+            
+            # Clear any previously loaded motifs (new PDB = new motifs)
+            gui.viz_manager.motif_loader.loaded_motifs = {}
+            
+            # Build auth→label chain mapping if in label mode
+            gui.auth_to_label_map = {}
+            if cif_auth_val == 0:
+                gui.auth_to_label_map = gui._build_auth_label_chain_mapping(pdb_arg)
+            
+            # Report chain ID mode
+            chain_mode = "auth_asym_id (default)" if cif_auth_val == 1 else "label_asym_id"
+            gui.logger.success(f"Loaded structure {pdb_arg.upper()} as '{structure_name}'")
+            gui.logger.info(f"Chain ID mode: {chain_mode}")
+            
+            # Get and display chains
+            try:
+                chains = cmd.get_chains(structure_name)
+                if chains:
+                    gui.logger.info(f"Chains found: {', '.join(chains[:20])}" +
+                                   (f" ... (+{len(chains)-20} more)" if len(chains) > 20 else ""))
+            except:
+                pass
+            
+            gui.logger.info("")
+            gui.logger.info("Next steps:")
+            if gui.current_source_mode:
+                gui.logger.info("  rmv_motifs                 Fetch motif data from current source")
+            else:
+                gui.logger.info("  rmv_source <N>             Select a motif data source (1-7)")
+            gui.logger.info("  rmv_sources                List all available sources")
+            gui.logger.info("")
+            
+        except Exception as e:
+            gui.logger.error(f"Failed to load {pdb_arg}: {str(e)}")
+    
+    def load_motif_data(argument=''):
+        """PyMOL command: Fetch motif data from the selected source for the loaded PDB.
+        
+        Requires:
+            1. A PDB structure must be loaded first (rmv_fetch)
+            2. A source must be selected (rmv_source)
+        
+        Usage:
+            rmv_motifs                   Fetch motifs from current source
+        
+        Workflow:
+            rmv_fetch 1S72               # Step 1: Load PDB structure
+            rmv_source 3                 # Step 2: Select BGSU API
+            rmv_motifs                   # Step 3: Fetch motif data
+            rmv_summary                  # Step 4: View summary
+        """
+        # Check: PDB must be loaded first
+        if not gui.loaded_pdb_id:
+            gui.logger.error("No PDB structure loaded.")
+            gui.logger.info("Load a structure first:")
+            gui.logger.info("  rmv_fetch <PDB_ID>")
+            gui.logger.info("  Example: rmv_fetch 1S72")
+            return
+        
+        # Check: Source must be selected
+        if not gui.current_source_mode:
+            gui.logger.error("No source selected.")
+            gui.logger.info("Select a source first:")
+            gui.logger.info("  rmv_source <N>             (1-7)")
+            gui.logger.info("  Example: rmv_source 3      (BGSU API)")
+            gui.logger.info("  rmv_sources                (list all)")
+            return
+        
+        pdb_id = gui.loaded_pdb_id
+        
+        # Dispatch to appropriate loader based on source mode
+        if gui.current_source_mode == 'user' and gui.current_user_tool:
+            gui.load_user_annotations_action(gui.current_user_tool, pdb_id)
+        else:
+            gui.fetch_motif_data_action(pdb_id, None)
+    
+    def load_structure(pdb_id_or_path='', background_color='', database=''):
+        """PyMOL command: Load structure and automatically show all motifs.
+        
+        Usage:
+            rmv_load <pdb_id_or_path>
+            rmv_load <pdb_id_or_path>, bg_color=lightgray
+            rmv_load <pdb_id_or_path>, database=atlas
+            rmv_load <pdb_id_or_path>, database=rfam, bg_color=white
+        """
+        if not pdb_id_or_path:
+            gui.logger.error("Usage: rmv_load <PDB_ID_or_PATH> [, bg_color=gray80] [, database=atlas]")
+            return
+        
+        pdb_arg = str(pdb_id_or_path).strip()
+        bg_arg = str(background_color).strip() if background_color else None
+        db_arg = str(database).strip() if database else None
+        
+        gui.load_structure_action(pdb_arg, bg_arg, db_arg)
+    
+    def toggle_motif(motif_type='', visible=''):
+        """PyMOL command: Toggle motif visibility."""
+        # PyMOL can pass arguments different ways, so handle both
+        
+        # Case 1: Both arguments passed separately
+        if motif_type and visible:
+            motif_arg = motif_type
+            visible_arg = visible
+        else:
+            # Case 2: Everything in motif_type as a single string
+            full_arg = str(motif_type).strip()
+            parts = full_arg.split()
+            
+            if len(parts) < 2:
+                gui.logger.error(f"Usage: rmv_toggle MOTIF_TYPE on/off")
+                gui.logger.error(f"Example: rmv_toggle HL on")
+                return
+            
+            motif_arg = parts[0]
+            visible_arg = parts[1]
+        
+        # Parse visibility
+        visible_bool = str(visible_arg).lower() in ['on', 'true', '1', 'yes', 'show']
+        motif_arg = str(motif_arg).upper().strip()
+        
+        gui.toggle_motif_action(motif_arg, visible_bool)
+    
+    def motif_status():
+        """PyMOL command: Show plugin status."""
+        gui.print_status()
+    
+    def list_sources():
+        """PyMOL command: Show available data sources."""
+        gui.print_sources()
+    
+    def show_help():
+        """PyMOL command: Show all available commands."""
+        gui.print_help()
+    
+    def set_bg_color(color_name='gray80'):
+        """PyMOL command: Change background color of non-motif residues."""
+        color_arg = str(color_name).strip()
+        if not color_arg:
+            color_arg = 'gray80'
+        gui.set_background_color(color_arg)
+    
+    def motif_summary(motif_type='', instance_no=''):
+        """PyMOL command: Show motif summary table (console only, no rendering).
+        
+        Usage:
+            rmv_summary              Show all motifs summary for loaded PDB
+            rmv_summary HL           Show detailed instances of HL motif
+            rmv_summary HL 1         Show specific HL instance #1
+        """
+        if not motif_type:
+            # Show general motif summary
+            gui.print_motif_summary()
+        else:
+            # Check if instance number is provided
+            motif_arg = str(motif_type).strip().upper()
+            
+            # Handle both formats: "HL 1" and separate args
+            if instance_no:
+                try:
+                    inst_no = int(instance_no)
+                    gui.show_motif_instance_summary(motif_arg, inst_no)
+                except ValueError:
+                    gui.logger.error("Instance number must be an integer")
+            else:
+                # Check if the motif_type contains instance number at the end
+                parts = motif_arg.split()
+                if len(parts) >= 2 and parts[-1].isdigit():
+                    # Last part is a number - treat as instance number
+                    motif_name = ' '.join(parts[:-1])
+                    inst_no = int(parts[-1])
+                    gui.show_motif_instance_summary(motif_name, inst_no)
+                else:
+                    # Show all instances of the motif type
+                    gui.show_motif_summary_for_type(motif_arg)
+    
+    def set_source(mode='', tool=''):
+        """PyMOL command: Set motif data source mode using source ID numbers.
+        
+        NEW ID-BASED SYNTAX (Primary - use this):
+            rmv_source 1              - RNA 3D Atlas (Local)
+            rmv_source 2              - Rfam (Local)
+            rmv_source 3              - BGSU RNA 3D Hub (Online)
+            rmv_source 4              - Rfam API (Online)
+            rmv_source 5              - FR3D Annotations (User)
+            rmv_source 6              - RNAMotifScan (RMS - User)
+            rmv_source 7              - RNAMotifScanX (RMSX - User)
+        
+        Multi-Source Combine (with enrichment + cascade merge):
+            rmv_source 1 3            - Combine Atlas + BGSU (Atlas = priority)
+            rmv_source 2 5 3          - Combine 3 sources (Rfam = highest priority)
+        
+        With optional parameters:
+            rmv_source 6 off                       - RMS with filtering OFF
+            rmv_source 6 on                        - RMS with filtering ON
+            rmv_source 6 C-LOOP 0.05 KINK-TURN 0.02 - RMS with custom P-values
+            rmv_source 7 C-LOOP_CONSENSUS 0.01    - RMSX with custom P-value
+        
+        Info command:
+            rmv_source info 1         - Show detailed info about source 1
+        
+        Show all sources:
+            rmv_sources               - List all available sources with IDs
+        """
+        if not mode:
+            gui.print_source_info()
+            return
+        
+        mode_arg = str(mode).strip()
+        tool_arg = str(tool).strip() if tool else None
+        
+        # Handle PyMOL passing arguments as combined string
+        parts = mode_arg.split(None, 1)  # Split on first whitespace
+        first_part = parts[0].lower()
+        remaining_arg = parts[1] if len(parts) > 1 else tool_arg
+        
+        # Check if first argument is "info" command
+        if first_part == 'info':
+            gui._handle_source_info_command(remaining_arg)
+            return
+        
+        # Check if first argument is a number (source ID)
+        try:
+            source_id = int(first_part)
+            gui._handle_source_by_id(source_id, remaining_arg)
+            return
+        except ValueError:
+            pass  # Not a number, check for other commands
+        
+        # Legacy support for old syntax (backward compat during transition)
+        if first_part == 'combine':
+            gui._handle_combine_sources(remaining_arg)
+        elif first_part == 'user':
+            gui._handle_user_source(remaining_arg)
+        elif first_part == 'local':
+            gui._handle_local_source(remaining_arg)
+        elif first_part == 'web':
+            gui._handle_web_source(remaining_arg)
+        else:
+            # Old-style: auto, all, etc.
+            gui.set_source_mode(first_part)
+    
+    def refresh_motifs(pdb_id=''):
+        """PyMOL command: Force refresh motifs from API (bypass cache).
+        
+        Usage:
+            rmv_refresh        - Refresh current structure
+            rmv_refresh 4V9F   - Refresh specific PDB
+        """
+        pdb_arg = str(pdb_id).strip() if pdb_id else None
+        gui.refresh_motifs_action(pdb_arg)
+    
+    def _resolve_motif_type_and_instance(full_arg, instance_arg=''):
+        """Resolve multi-word motif type name and optional instance number.
+        
+        Handles cases like:
+            '4-WAY JUNCTION (J4)', ''    -> ('4-WAY JUNCTION (J4)', None)
+            '4-WAY JUNCTION (J4)', '1'   -> ('4-WAY JUNCTION (J4)', 1)
+            '4-WAY JUNCTION (J4) 1', ''  -> ('4-WAY JUNCTION (J4)', 1)
+            'HL', '1'                    -> ('HL', 1)
+            'HL 1', ''                   -> ('HL', 1)
+        """
+        full_arg = str(full_arg).strip().upper()
+        instance_arg = str(instance_arg).strip() if instance_arg else ''
+        
+        # If instance_arg is provided and is a number, use it directly
+        if instance_arg:
+            try:
+                return full_arg, int(instance_arg)
+            except ValueError:
+                # instance_arg is actually part of the motif name
+                full_arg = f"{full_arg} {instance_arg}"
+        
+        # Try to match against loaded motif types
+        loaded_motifs = gui.viz_manager.motif_loader.get_loaded_motifs() if gui.viz_manager.motif_loader else {}
+        
+        # Check if full_arg exactly matches a loaded motif type
+        if full_arg in loaded_motifs:
+            return full_arg, None
+        
+        # Check if the last token is a number (instance ID)
+        # Try removing the last word and see if the rest matches a motif type
+        parts = full_arg.rsplit(None, 1)  # split from right, max 1 split
+        if len(parts) == 2 and parts[1].isdigit():
+            candidate_type = parts[0]
+            instance_no = int(parts[1])
+            if candidate_type in loaded_motifs:
+                return candidate_type, instance_no
+            # Also try without matching — maybe it's a simple type like 'HL 1'
+            return candidate_type, instance_no
+        
+        # No instance number found
+        return full_arg, None
+    
+    def show_motif(motif_type='', instance_no=''):
+        """PyMOL command: Show specific motif type, or show specific instance.
+        
+        Usage:
+            rmv_show GNRA          - Show only GNRA motifs (all instances)
+            rmv_show HL            - Show only hairpin loops (all instances)
+            rmv_show HL 1          - Show specific HL instance #1 (zoom + details)
+            rmv_show GNRA 2        - Show specific GNRA instance #2
+            rmv_show 4-WAY JUNCTION (J4)      - Multi-word motif type
+            rmv_show 4-WAY JUNCTION (J4) 1    - Multi-word with instance
+        """
+        if not motif_type:
+            gui.logger.error("Usage: rmv_show <MOTIF_TYPE> [<INSTANCE_NO>]")
+            gui.logger.error("Example: rmv_show GNRA")
+            gui.logger.error("Example: rmv_show HL 1")
+            return
+        
+        motif_arg, inst_no = _resolve_motif_type_and_instance(motif_type, instance_no)
+        
+        if inst_no is not None:
+            gui.viz_manager.show_motif_instance(motif_arg, inst_no)
+        else:
+            gui.viz_manager.show_motif_type(motif_arg)
+    
+    def show_all():
+        """PyMOL command: Show all motifs (reset to default view)."""
+        gui.viz_manager.show_all_motifs()
+    
+    def load_user_annotations(tool='', pdb_id=''):
+        """
+        PyMOL command: Load motifs from user-uploaded annotation files.
+        
+        Supports: FR3D, RNAMotifScan
+        
+        Usage:
+            rmv_user fr3d 1S72          Load FR3D annotations for 1S72
+            rmv_user rnamotifscan 1A00  Load RNAMotifScan annotations
+            rmv_user list               Show available user annotation files
+        """
+        # Handle PyMOL argument parsing - may get as single string or separate args
+        tool_arg = str(tool).strip() if tool else ''
+        pdb_arg = str(pdb_id).strip() if pdb_id else ''
+        
+        # If tool contains both tool name and pdb_id (space-separated)
+        if tool_arg and not pdb_arg:
+            parts = tool_arg.split()
+            if len(parts) >= 2:
+                tool_arg = parts[0]
+                pdb_arg = parts[1]
+        
+        if not tool_arg:
+            print("\n" + "="*60)
+            print("User Annotation Loader")
+            print("="*60)
+            print("\nUsage: rmv_user <TOOL> <PDB_ID>")
+            print("\nSupported tools:")
+            print("  fr3d            FR3D output format")
+            print("  rnamotifscan    RNAMotifScan output format")
+            print("\nExamples:")
+            print("  rmv_user fr3d 1S72")
+            print("  rmv_user rnamotifscan 1A00")
+            print("  rmv_user list               Show available files")
+            print("\nFile locations:")
+            print("  FR3D files:        database/user_annotations/fr3d/")
+            print("  RNAMotifScan:      database/user_annotations/rnamotifscan/")
+            print("="*60 + "\n")
+            return
+        
+        tool_arg = tool_arg.lower().strip()
+        
+        if tool_arg == 'list':
+            gui._list_user_annotations()
+            return
+        
+        if not pdb_arg:
+            gui.logger.error("Please specify PDB ID")
+            print(f"  Usage: rmv_user {tool_arg} <PDB_ID>")
+            return
+        
+        gui.load_user_annotations_action(tool_arg, pdb_arg)
+    
+    # Add commands to PyMOL
+    cmd.extend('rmv_fetch', fetch_raw_pdb)
+    cmd.extend('rmv_motifs', load_motif_data)
+    cmd.extend('rmv_load', load_structure)
+    cmd.extend('rmv_toggle', toggle_motif)
+    cmd.extend('rmv_status', motif_status)
+    cmd.extend('rmv_sources', list_sources)
+    cmd.extend('rmv_help', show_help)
+    cmd.extend('rmv_bg_color', set_bg_color)
+    cmd.extend('rmv_summary', motif_summary)
+    cmd.extend('rmv_source', set_source)
+    cmd.extend('rmv_refresh', refresh_motifs)
+    cmd.extend('rmv_show', show_motif)
+    cmd.extend('rmv_all', show_all)
+    cmd.extend('rmv_user', load_user_annotations)
+    
+    def show_colors():
+        """PyMOL command: Show color legend for all motif types."""
+        from . import colors as color_module
+        loaded = gui.viz_manager.motif_loader.get_loaded_motifs()
+        if loaded:
+            color_module.print_color_legend(loaded)
+        else:
+            color_module.print_color_legend()
+    
+    cmd.extend('rmv_colors', show_colors)
+    
+    def set_motif_color(motif_type='', color=''):
+        """PyMOL command: Change color of a specific motif type.
+        
+        Usage:
+            rmv_color HL red         Change HL to red
+            rmv_color GNRA blue      Change GNRA to blue
+            rmv_color IL 0.5 1.0 0.5 Change IL to RGB values
+        
+        Available colors: red, green, blue, yellow, cyan, magenta, orange,
+                         pink, purple, teal, gold, coral, turquoise, etc.
+        """
+        if not motif_type:
+            print("\nUsage: rmv_color <MOTIF_TYPE> <COLOR>")
+            print("Examples:")
+            print("  rmv_color HL red")
+            print("  rmv_color GNRA blue")
+            print("  rmv_color IL green")
+            print("\nAvailable colors: red, green, blue, yellow, cyan, magenta,")
+            print("                  orange, pink, purple, teal, gold, coral, etc.")
+            return
+        
+        if not color:
+            gui.logger.error("Please specify a color")
+            gui.logger.error("Example: rmv_color HL red")
+            return
+        
+        from . import colors as color_module
+        
+        motif_arg = str(motif_type).strip().upper()
+        color_arg = str(color).strip().lower()
+        
+        # Set the custom color
+        result = color_module.set_custom_motif_color(motif_arg, color_arg)
+        
+        gui.logger.success(f"Changed {motif_arg} color to {color_arg}")
+        
+        # Re-apply color to currently loaded motifs if any
+        loaded_motifs = gui.viz_manager.motif_loader.get_loaded_motifs()
+        if motif_arg in loaded_motifs:
+            info = loaded_motifs[motif_arg]
+            structure_name = info.get('structure_name')
+            main_selection = info.get('main_selection')
+            
+            # Re-color the motif residues in the structure
+            if main_selection:
+                try:
+                    color_module.set_motif_color_in_pymol(cmd, main_selection, motif_arg)
+                    gui.logger.info(f"Applied new color to {motif_arg} residues")
+                except Exception as e:
+                    gui.logger.debug(f"Could not apply color: {e}")
+        
+        print(f"\n  {motif_arg} is now colored {color_arg}")
+        print(f"  Use 'rmv_show {motif_arg}' or 'rmv_all' to see the change\n")
+    
+    cmd.extend('rmv_color', set_motif_color)
+    
+    def save_motif_images(argument=''):
+        """PyMOL command: Save motif instance images to organized folders.
+        
+        Usage:
+            rmv_save ALL                      Save all motif types and instances (default: cartoon)
+            rmv_save ALL sticks               Save all motifs as sticks representation
+            rmv_save HL                       Save all hairpin loop instances (default: cartoon)
+            rmv_save HL sticks                Save all HL instances as sticks
+            rmv_save HL 3                     Save 3rd HL instance (default: cartoon)
+            rmv_save HL 3 spheres             Save 3rd HL instance as spheres
+            rmv_save current                  Save current PyMOL view
+            rmv_save current my_view.png      Save current view to file
+        
+        Available representations:
+            - cartoon       (default) - Shows RNA backbone ribbon
+            - sticks        - Shows all atoms as sticks
+            - spheres       - Shows all atoms as spheres
+            - ribbon        - Simplified backbone ribbon
+            - lines         - Wire representation
+            - licorice      - Thick bonds representation
+            - surface       - Molecular surface
+            - cartoon+sticks - Combination of cartoon and sticks
+        
+        Output folder structure:
+            plugin_dir/motif_images/pdb_id/MOTIF_TYPE/instance_#_chain_residues.png
+        
+        Each image is named with:
+            - Instance number (as shown in rmv_summary)
+            - Chain identifier
+            - Residue range
+            - Optional annotation text
+        """
+        arguments = str(argument).strip().split()
+        
+        if not arguments:
+            print("\nUsage: rmv_save <ALL | MOTIF_TYPE | MOTIF_TYPE INSTANCE_ID | current> [representation]")
+            print("\nExamples:")
+            print("  rmv_save ALL             Save all motif images (cartoon)")
+            print("  rmv_save ALL sticks      Save all motif images (sticks)")
+            print("  rmv_save HL              Save all hairpin loop images (cartoon)")
+            print("  rmv_save HL sticks       Save all HL images (sticks)")
+            print("  rmv_save HL 1            Save specific HL instance #1 (cartoon)")
+            print("  rmv_save HL 1 spheres    Save specific HL instance #1 (spheres)")
+            print("  rmv_save IL              Save all internal loop images")
+            print("  rmv_save current         Save current PyMOL view")
+            print("  rmv_save current out.png Save current view to file")
+            print("\nRepresentations: cartoon, sticks, spheres, ribbon, lines, licorice, surface, cartoon+sticks")
+            print("\nOutput goes to: plugin_dir/motif_images/pdb_id/MOTIF_TYPE/")
+            print("Each image is labeled: <type>-<instance>-<chain>-<residues>.png")
+            return
+        
+        pdb_id = gui.viz_manager.structure_loader.get_current_pdb_id()
+        if not pdb_id:
+            gui.logger.error("No structure loaded")
+            return
+        
+        loaded_motifs = gui.viz_manager.motif_loader.get_loaded_motifs()
+        if not loaded_motifs:
+            gui.logger.error("No motifs loaded for this structure")
+            return
+        
+        # Parse representation parameter if provided
+        representation = 'cartoon'  # Default
+        
+        if arguments[0].upper() == 'ALL':
+            # rmv_save ALL [representation]
+            if len(arguments) > 1:
+                representation = arguments[1].lower()
+            gui.save_all_motif_images_action(representation=representation)
+        elif arguments[0].upper() == 'CURRENT':
+            # Save current view: rmv_save current [filename]
+            if len(arguments) > 1:
+                filename = arguments[1]
+            else:
+                # Default filename with timestamp
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"pymol_view_{timestamp}.png"
+            
+            gui.save_current_view_action(filename)
+        elif len(arguments) >= 2:
+            # Save motif type or specific instance: rmv_save <TYPE> [INSTANCE_ID] [representation]
+            motif_type = arguments[0].upper()
+            
+            if motif_type not in loaded_motifs:
+                gui.logger.error(f"Motif type '{motif_type}' not found")
+                gui.logger.info(f"Available: {', '.join(sorted(loaded_motifs.keys()))}")
+                return
+            
+            # Check if second argument is instance ID or representation
+            try:
+                instance_id = int(arguments[1])
+                # Second argument is instance ID
+                if len(arguments) > 2:
+                    representation = arguments[2].lower()
+                gui.save_motif_instance_by_id_action(motif_type, instance_id, 
+                                                    representation=representation)
+            except ValueError:
+                # Second argument is representation (not instance ID)
+                representation = arguments[1].lower()
+                gui.save_motif_type_images_action(motif_type, representation=representation)
+    
+    cmd.extend('rmv_save', save_motif_images)
+    
+    def show_chain_diagnostics(structure_name=''):
+        """PyMOL command: Show chain ID diagnostic information for a loaded structure.
+        
+        Usage:
+            rmv_chains              Show chains for current structure
+            rmv_chains 1s72         Show chains for specific structure
+        """
+        try:
+            # Determine structure name
+            if not structure_name:
+                structure_name = gui.loaded_pdb if hasattr(gui, 'loaded_pdb') and gui.loaded_pdb else ''
+            
+            if not structure_name:
+                print("\n  No structure specified. Usage: rmv_chains <structure_name>")
+                return
+            
+            structure_name = structure_name.strip().lower()
+            
+            # Read current cif_use_auth from GUI state
+            cif_auth_val = getattr(gui, 'cif_use_auth', 1)
+            chain_mode = "auth_asym_id" if cif_auth_val == 1 else "label_asym_id"
+            chain_label = "Auth chains" if cif_auth_val == 1 else "Label chains"
+            
+            # Get chains
+            try:
+                chains = cmd.get_chains(structure_name)
+            except Exception as e:
+                print(f"\n  ERROR: Could not get chains for '{structure_name}': {e}")
+                return
+            
+            # Format chains in rows of 20
+            print(f"\n  Structure: {structure_name.upper()}  |  cif_use_auth = {cif_auth_val} ({chain_mode})  |  Chains: {len(chains)}")
+            print(f"  {chain_label}: ", end="")
+            for i, ch in enumerate(chains):
+                if i > 0 and i % 20 == 0:
+                    print(f"\n               ", end="")
+                print(f" {ch}", end="")
+            print("\n")
+            
+        except Exception as e:
+            print(f"\n  Error in chain diagnostics: {e}\n")
+    
+    cmd.extend('rmv_chains', show_chain_diagnostics)
+    
+    gui.logger.success("RNA Motif Visualizer GUI initialized")
+    gui.logger.info("")
+    gui.logger.info("Quick Start:")
+    gui.logger.info("  rmv_fetch 1S72              Load PDB structure")
+    gui.logger.info("  rmv_source 3                Select BGSU API (3000+ structures)")
+    gui.logger.info("  rmv_motifs                  Fetch motif data from source")
+    gui.logger.info("  rmv_summary                 Show motif summary")
+    gui.logger.info("  rmv_show HL                 Highlight and render hairpin loops")
+    gui.logger.info("  rmv_show HL 1               Zoom to specific instance")
+    gui.logger.info("  rmv_save ALL                Save all motif images (cartoon)")
+    gui.logger.info("  rmv_save current            Save current PyMOL view (high-res)")
