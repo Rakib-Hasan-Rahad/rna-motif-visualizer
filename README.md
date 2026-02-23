@@ -194,8 +194,7 @@ rmv_fetch 1S72 cif_use_auth=0    # Chains: A, AA, AB, ... (PDB-standardized)
 
 **Use label mode when:**
 - Working with mmCIF files where PDB standardization is required
-- Using data sources annotated with label_asym_id (e.g., RNAMotifScanX)
-- Comparing multi-chain complex structures
+- Using data sources annotated with label_asym_id 
 
 ---
 
@@ -215,31 +214,6 @@ API responses are cached for **30 days** at:
 ```bash
 rm -rf ~/.rna_motif_visualizer_cache/
 ```
-
----
-
-## 🧬 Supported Motif Types
-
-### Structural Motifs (BGSU/RNA 3D Atlas)
-- **Hairpin Loops (HL)**
-- **Internal Loops (IL)**
-- **Junctions:** 3-way (J3), 4-way (J4), 5-way (J5), 6-way (J6), 7-way (J7)
-- **Pseudoknots**
-- **Kissing Hairpins**
-
-### Sequence-Based Motifs (Rfam)
-- **GNRA Tetraloops** (GAAA, GGAA, GCAA, GGGA)
-- **UNCG Tetraloops**
-- **Kink-Turns (K-turns)**
-- **T-loops**
-- **C-loops**
-- **U-turns**
-
-### Composite/Complex Motifs
-- **Sarcin-Ricin**
-- **Kink-Turn + Bulge combinations**
-- **Triple-sheared structures**
-- **Non-canonical base pair platforms**
 
 ---
 
@@ -287,18 +261,6 @@ rmv_save current                # ~300 dpi PNG ready for journal
 ```
 
 ---
-
-## 🐛 Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| Plugin not appearing | Verify you selected `rna_motif_visualizer` folder (not parent directory) in Plugin Manager |
-| No motifs found | Try `rmv_db 1` (local) or check structure is in PDB database |
-| API errors | Check internet connection; try `rmv_db 2` (local only) |
-| Slow first load | Normal—API call + caching. Second load is instant |
-| Chain ID mismatch in annotations | Use `rmv_fetch <ID> cif_use_auth=0` for label ID mode |
-| Session not saving | Save as `.pse` (PyMOL Session) before `rmv_save` |
-
 **Reset everything:**
 ```python
 rmv_reset                # Delete all objects & reset plugin state
@@ -351,57 +313,13 @@ rna-motif-visualizer/
 
 ---
 
-## 🔄 Workflow: From Prediction to Publication
-
-```
-Step 1: Run computational tool (e.g., machine learning model for motif detection)
-        ↓
-Step 2: Export predictions to CSV/JSON
-        ↓
-Step 3: Load in RNA Motif Visualizer
-        rmv_fetch <PDB_ID>
-        rmv_db 5 /path/to/predictions
-        rmv_load_motif
-        
-        ↓
-Step 4: Validate against known motifs
-        rmv_db 3            # BGSU reference
-        rmv_load_motif
-        rmv_show <MOTIF>    # Compare visually
-        
-        ↓
-Step 5: Generate publication figures
-        rmv_save ALL        # Batch export all instances
-        
-        ↓
-Step 6: Include in paper/supplementary materials
-```
-
----
-
-## 📄 Citation
-
-If you use RNA Motif Visualizer in your research, please cite:
-
-```bibtex
-@software{rna_motif_visualizer_2026,
-  title={RNA Motif Visualizer: Automated comparative analysis of RNA structural motifs},
-  author={Rahad, Rakib Hasan},
-  year={2026},
-  url={https://github.com/Rakib-Hasan-Rahad/rna-motif-visualizer},
-  license={MIT}
-}
-```
-
----
-
 ## 📄 License
 
 MIT License — see [LICENSE](LICENSE) file.
 
 ---
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - **BGSU RNA 3D Hub** — Comprehensive RNA motif annotations and structure database
 - **Rfam Database** — Conserved RNA family and motif definitions
@@ -409,17 +327,16 @@ MIT License — see [LICENSE](LICENSE) file.
 - **PyMOL** — Schrödinger, LLC; molecular visualization platform
 - **RNAMotifScan & FR3D** — Community tools for motif annotation
 
----
+## 🐛 Troubleshooting
 
-## 🤝 Contributing
-
-Contributions welcome! See [DEVELOPER.md](DEVELOPER.md) for:
-- Architecture overview
-- How to add new data sources
-- How to extend motif types
-- Code style guidelines
-
----
+| Problem | Solution |
+|---------|----------|
+| Plugin not appearing | Verify you selected `rna_motif_visualizer` folder (not parent directory) in Plugin Manager |
+| No motifs found | Try `rmv_db 1` (local) or check structure is in PDB database |
+| API errors | Check internet connection; try `rmv_db 2` (local only) |
+| Slow first load | Normal—API call + caching. Second load is instant |
+| Chain ID mismatch in annotations | Use `rmv_fetch <ID> cif_use_auth=0` for label ID mode |
+| Session not saving | Save as `.pse` (PyMOL Session) before `rmv_save` |
 
 ## 📧 Support
 
