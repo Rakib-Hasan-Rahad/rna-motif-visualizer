@@ -284,7 +284,7 @@ class UnifiedMotifLoader:
         
         if all_selections:
             combined_sel = " or ".join(all_selections)
-            main_motif_sel = f"({structure_name}) and ({combined_sel})"
+            main_motif_sel = f"(model {structure_name}) and ({combined_sel})"
             # Hide the cartoon on main structure for these residues
             self.cmd.hide('cartoon', main_motif_sel)
         
@@ -458,7 +458,7 @@ class VisualizationManager:
             
             # Select ALL polymer.nucleic
             rna_selection = f"{structure_name}_rna"
-            self.cmd.select(rna_selection, f"{structure_name} and polymer.nucleic")
+            self.cmd.select(rna_selection, f"model {structure_name} and polymer.nucleic")
             
             # Show cartoon representation
             self.cmd.show('cartoon', rna_selection)
@@ -770,12 +770,12 @@ class VisualizationManager:
         
         # Show the full structure with uniform representation
         self.cmd.enable(structure_name)
-        self.cmd.show('cartoon', f"{structure_name} and polymer.nucleic")
-        self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
-        self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
+        self.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
+        self.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
+        self.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
         
         # Step 3: Color the ENTIRE structure gray80 first
-        self.cmd.color('gray80', f"{structure_name} and polymer.nucleic")
+        self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
         
         # Color the selected motif residues in their color
         if motif_details:
@@ -809,7 +809,7 @@ class VisualizationManager:
                 
                 if selections:
                     combined_sel = " or ".join(selections)
-                    instance_sel = f"({structure_name}) and ({combined_sel})"
+                    instance_sel = f"(model {structure_name}) and ({combined_sel})"
                     # Color this instance with the motif color
                     colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)
         
@@ -868,7 +868,7 @@ class VisualizationManager:
             return False
         
         combined_sel = " or ".join(selections)
-        instance_sel = f"({structure_name}) and ({combined_sel})"
+        instance_sel = f"(model {structure_name}) and ({combined_sel})"
         
         # Create object name: MOTIF_NO_S3 (e.g., GNRA_1_S3, GNRA_2_S7)
         obj_name = sanitize_pymol_name(f"{motif_type}_{instance_no}{source_suffix}")
@@ -1228,10 +1228,10 @@ class VisualizationManager:
         
         # Show the full structure with uniform representation in gray80
         self.cmd.enable(structure_name)
-        self.cmd.show('cartoon', f"{structure_name} and polymer.nucleic")
-        self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
-        self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
-        self.cmd.color('gray80', f"{structure_name} and polymer.nucleic")
+        self.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
+        self.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
+        self.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
+        self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
         
         # Color the instance residues WITHIN the main structure
         detail = motif_details[instance_no - 1]
@@ -1259,7 +1259,7 @@ class VisualizationManager:
             
             if selections:
                 combined_sel = " or ".join(selections)
-                instance_sel = f"({structure_name}) and ({combined_sel})"
+                instance_sel = f"(model {structure_name}) and ({combined_sel})"
                 
                 # Color the instance residues WITHIN the main structure (no overlap)
                 colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)
@@ -1397,12 +1397,12 @@ class VisualizationManager:
         
         # Step 3: Show the full structure with uniform representation
         self.cmd.enable(structure_name)
-        self.cmd.show('cartoon', f"{structure_name} and polymer.nucleic")
-        self.cmd.set('cartoon_nucleic_acid_mode', 4, structure_name)
-        self.cmd.set('cartoon_tube_radius', 0.4, structure_name)
+        self.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
+        self.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
+        self.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
         
         # Color the ENTIRE structure gray80 first
-        self.cmd.color('gray80', f"{structure_name} and polymer.nucleic")
+        self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
         
         # Step 4: Enable all motif-type objects and color residues on the structure
         total_instances = 0
@@ -1440,7 +1440,7 @@ class VisualizationManager:
                 
                 if selections:
                     combined_sel = " or ".join(selections)
-                    instance_sel = f"({structure_name}) and ({combined_sel})"
+                    instance_sel = f"(model {structure_name}) and ({combined_sel})"
                     try:
                         self.cmd.show('cartoon', instance_sel)
                         colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)

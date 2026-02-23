@@ -54,6 +54,10 @@ class UserAnnotationProvider(BaseProvider):
         self.rms_custom_pvalues: Dict[str, float] = {}      # {motif_name: p_value}
         self.rmsx_custom_pvalues: Dict[str, float] = {}     # {motif_name: p_value}
         
+        # Override tool directory: when set, maps tool_name -> Path
+        # Used for custom data paths (e.g., rmv_db 7 /path/to/rmsx/data)
+        self.override_tool_dirs: Dict[str, Path] = {}
+        
         # Track loaded data
         self._loaded_motifs_cache: Dict[str, Dict] = {}
         self._available_pdbs: List[str] = []
@@ -213,7 +217,11 @@ class UserAnnotationProvider(BaseProvider):
         
         # Search each tool subdirectory
         for tool_name in tools_to_load:
-            tool_dir = self.user_annotations_dir / tool_name
+            # Use override directory if set for this tool, otherwise default
+            if tool_name in self.override_tool_dirs:
+                tool_dir = self.override_tool_dirs[tool_name]
+            else:
+                tool_dir = self.user_annotations_dir / tool_name
             if not tool_dir.exists():
                 continue
             

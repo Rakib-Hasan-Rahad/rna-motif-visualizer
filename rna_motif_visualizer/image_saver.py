@@ -254,7 +254,7 @@ class MotifImageSaver:
                 return False
             
             combined_sel = " or ".join(selections)
-            instance_sel = f"({structure_name}) and ({combined_sel})"
+            instance_sel = f"(model {structure_name}) and ({combined_sel})"
             
             # Temporary object name
             temp_motif_obj = f"_tmp_motif_{instance_no}"
@@ -264,7 +264,7 @@ class MotifImageSaver:
                 self.cmd.disable(structure_name)
                 
                 # Create temporary object with ONLY the motif residues
-                temp_instance_sel = f"({structure_name}) and ({combined_sel})"
+                temp_instance_sel = f"(model {structure_name}) and ({combined_sel})"
                 self.cmd.create(temp_motif_obj, temp_instance_sel)
                 self.cmd.enable(temp_motif_obj)
                 

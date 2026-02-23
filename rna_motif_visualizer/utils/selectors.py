@@ -76,7 +76,7 @@ class MotifSelector:
                 return None
             
             # Create object in PyMOL
-            full_selection = f"({structure_name}) and {selection}"
+            full_selection = f"(model {structure_name}) and {selection}"
             self.cmd.create(obj_name, full_selection)
             
             # Layer 3: Verify atoms were found, try segi fallback if not
@@ -91,7 +91,7 @@ class MotifSelector:
                     chain, residues, structure_name=structure_name, use_segi=True
                 )
                 if segi_selection:
-                    segi_full = f"({structure_name}) and {segi_selection}"
+                    segi_full = f"(model {structure_name}) and {segi_selection}"
                     segi_count = self.cmd.count_atoms(segi_full)
                     if segi_count > 0:
                         self.cmd.delete(obj_name)
@@ -156,7 +156,7 @@ class MotifSelector:
             
             # Combine all selections with OR
             combined_selection = " or ".join([f"({s})" for s, _, _ in selections])
-            full_selection = f"({structure_name}) and ({combined_selection})"
+            full_selection = f"(model {structure_name}) and ({combined_selection})"
             
             # Create combined object
             self.cmd.create(obj_name, full_selection)
@@ -177,7 +177,7 @@ class MotifSelector:
                 
                 if segi_selections:
                     segi_combined = " or ".join([f"({s})" for s in segi_selections])
-                    segi_full = f"({structure_name}) and ({segi_combined})"
+                    segi_full = f"(model {structure_name}) and ({segi_combined})"
                     segi_count = self.cmd.count_atoms(segi_full)
                     if segi_count > 0:
                         self.cmd.delete(obj_name)
@@ -243,7 +243,7 @@ class MotifSelector:
             
             # Combine all selections
             combined_selection = " or ".join([f"({s})" for s, _, _ in selections])
-            full_selection = f"({structure_name}) and ({combined_selection})"
+            full_selection = f"(model {structure_name}) and ({combined_selection})"
             
             # Create a named selection (not a new object)
             self.cmd.select(selection_name, full_selection)
@@ -264,7 +264,7 @@ class MotifSelector:
                 
                 if segi_selections:
                     segi_combined = " or ".join([f"({s})" for s in segi_selections])
-                    segi_full = f"({structure_name}) and ({segi_combined})"
+                    segi_full = f"(model {structure_name}) and ({segi_combined})"
                     segi_count = self.cmd.count_atoms(segi_full)
                     if segi_count > 0:
                         self.cmd.select(selection_name, segi_full)

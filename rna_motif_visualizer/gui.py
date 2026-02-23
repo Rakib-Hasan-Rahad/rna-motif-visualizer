@@ -245,6 +245,33 @@ class MotifVisualizerGUI:
                 if source_selector:
                     # Check if we're in user mode with specific tool selected
                     if self.current_source_mode == 'user' and self.current_user_tool:
+                        # If custom data path is set, override the tool directory
+                        if self.user_data_path and 'user' in source_selector.providers:
+                            from pathlib import Path
+                            user_prov_ref = source_selector.providers['user']
+                            # Map GUI tool name to provider's internal tool name
+                            tool_name_map = {
+                                'rnamotifscanx': 'RNAMotifScanX',
+                                'rmsx': 'RNAMotifScanX',
+                                'rnamotifscan': 'RNAMotifScan',
+                                'rms': 'RNAMotifScan',
+                                'fr3d': 'fr3d',
+                            }
+                            internal_tool = tool_name_map.get(self.current_user_tool.lower(), self.current_user_tool)
+                            user_prov_ref.override_tool_dirs[internal_tool] = Path(self.user_data_path)
+                            self.logger.debug(f"Override tool dir for {internal_tool}: {self.user_data_path}")
+                        
+                        # Apply filtering settings to the provider
+                        user_prov = source_selector.providers.get('user')
+                        if user_prov:
+                            tool_lower = self.current_user_tool.lower() if self.current_user_tool else ''
+                            if tool_lower in ['rms', 'rnamotifscan']:
+                                user_prov.apply_rms_filtering = self.user_rms_filtering_enabled
+                                user_prov.set_rms_custom_pvalues(self.user_rms_custom_pvalues)
+                            elif tool_lower in ['rmsx', 'rnamotifscanx']:
+                                user_prov.apply_rmsx_filtering = self.user_rmsx_filtering_enabled
+                                user_prov.set_rmsx_custom_pvalues(self.user_rmsx_custom_pvalues)
+                        
                         # Use tool-specific method to filter data
                         self.logger.debug(f"Using tool-specific loading: {self.current_user_tool}")
                         available_motifs = source_selector.get_motifs_for_pdb_and_tool(
@@ -353,7 +380,7 @@ class MotifVisualizerGUI:
                     
                     if all_selections:
                         combined_sel = " or ".join(all_selections)
-                        main_motif_sel = f"({structure_name}) and ({combined_sel})"
+                        main_motif_sel = f"(model {structure_name}) and ({combined_sel})"
                 
                 if motif_details:
                     if display_type_upper in motif_summary:
@@ -381,6 +408,23 @@ class MotifVisualizerGUI:
                             'source_suffix': source_suffix,
                         }
                         self.logger.success(f"Loaded {len(motif_details)} {display_type_upper} motifs")
+            
+            # Sort motif_details within each type by minimum residue number
+            # (same as _load_motif_type does in loader.py)
+            def _get_min_residue(detail):
+                residues = detail.get('residues', [])
+                if not residues:
+                    return float('inf')
+                min_resi = float('inf')
+                for res in residues:
+                    if isinstance(res, tuple) and len(res) >= 2:
+                        resi = res[1]
+                        if isinstance(resi, int):
+                            min_resi = min(min_resi, resi)
+                return min_resi if min_resi != float('inf') else float('inf')
+            
+            for mtype_key, mtype_info in motif_summary.items():
+                mtype_info['motif_details'].sort(key=_get_min_residue)
             
             # Store in viz_manager's motif_loader for rmv_summary/rmv_show to access
             self.viz_manager.motif_loader.loaded_motifs = motif_summary
@@ -562,15 +606,23 @@ class MotifVisualizerGUI:
             elif source_type == 'user':
                 # User annotations (FR3D, RMS, RMSX)
                 from .database.user_annotations import UserAnnotationProvider
-                if self.user_data_path:
-                    user_dir = Path(self.user_data_path)
-                else:
-                    plugin_dir = Path(__file__).parent
-                    user_dir = plugin_dir / 'database' / 'user_annotations'
+                plugin_dir = Path(__file__).parent
+                user_dir = plugin_dir / 'database' / 'user_annotations'
                 provider = UserAnnotationProvider(str(user_dir))
                 tool = info.get('tool')
                 if tool:
                     provider.set_active_tool(tool)
+                    # If custom data path is set, override the tool directory
+                    if self.user_data_path:
+                        tool_name_map = {
+                            'rnamotifscanx': 'RNAMotifScanX',
+                            'rmsx': 'RNAMotifScanX',
+                            'rnamotifscan': 'RNAMotifScan',
+                            'rms': 'RNAMotifScan',
+                            'fr3d': 'fr3d',
+                        }
+                        internal_tool = tool_name_map.get(tool.lower(), tool)
+                        provider.override_tool_dirs[internal_tool] = Path(self.user_data_path)
                     # Apply p-value filtering settings for RMS/RMSX
                     tool_lower = tool.lower()
                     if tool_lower in ['rms', 'rnamotifscan']:
@@ -597,16 +649,25 @@ class MotifVisualizerGUI:
         try:
             from .database.user_annotations import UserAnnotationProvider
             
-            # Initialize user annotation provider
-            if self.user_data_path:
-                user_annotations_dir = Path(self.user_data_path)
-            else:
-                plugin_dir = Path(__file__).parent
-                user_annotations_dir = plugin_dir / 'database' / 'user_annotations'
+            # Initialize user annotation provider (always use default root)
+            plugin_dir = Path(__file__).parent
+            user_annotations_dir = plugin_dir / 'database' / 'user_annotations'
             provider = UserAnnotationProvider(str(user_annotations_dir))
             
             # SET ACTIVE TOOL FILTER BEFORE LOADING!
             provider.set_active_tool(tool)
+            
+            # If custom data path is set, override the tool directory
+            if self.user_data_path:
+                tool_name_map = {
+                    'rnamotifscanx': 'RNAMotifScanX',
+                    'rmsx': 'RNAMotifScanX',
+                    'rnamotifscan': 'RNAMotifScan',
+                    'rms': 'RNAMotifScan',
+                    'fr3d': 'fr3d',
+                }
+                internal_tool = tool_name_map.get(tool.lower(), tool)
+                provider.override_tool_dirs[internal_tool] = Path(self.user_data_path)
             
             # Set filtering state based on current settings (for RMS and RMSX only)
             tool_lower = tool.lower() if tool else ''
@@ -731,7 +792,7 @@ class MotifVisualizerGUI:
                     
                     if all_selections:
                         combined_sel = " or ".join(all_selections)
-                        main_motif_sel = f"({structure_name}) and ({combined_sel})"
+                        main_motif_sel = f"(model {structure_name}) and ({combined_sel})"
                 
                 if motif_details:
                     motif_summary[display_type_upper] = {
@@ -745,6 +806,22 @@ class MotifVisualizerGUI:
                         'source_suffix': source_suffix,
                     }
                     self.logger.success(f"Loaded {len(motif_details)} {display_type_upper} motifs")
+            
+            # Sort motif_details within each type by minimum residue number
+            def _get_min_residue(detail):
+                residues = detail.get('residues', [])
+                if not residues:
+                    return float('inf')
+                min_resi = float('inf')
+                for res in residues:
+                    if isinstance(res, tuple) and len(res) >= 2:
+                        resi = res[1]
+                        if isinstance(resi, int):
+                            min_resi = min(min_resi, resi)
+                return min_resi if min_resi != float('inf') else float('inf')
+            
+            for mtype_key, mtype_info in motif_summary.items():
+                mtype_info['motif_details'].sort(key=_get_min_residue)
             
             # Store in viz_manager
             self.viz_manager.motif_loader.loaded_motifs = motif_summary
@@ -3129,6 +3206,48 @@ def initialize_gui():
         print()
     
     cmd.extend('rmv_reset', reset_plugin)
+    
+    # --- Typo suggestion system ---
+    # Register common misspellings so users get helpful "Did you mean?" messages
+    # instead of cryptic SyntaxError from PyMOL's Python fallback
+    _RMV_COMMANDS = [
+        'rmv_fetch', 'rmv_load_motif', 'rmv_load', 'rmv_toggle', 'rmv_sources',
+        'rmv_help', 'rmv_bg_color', 'rmv_summary', 'rmv_db', 'rmv_source',
+        'rmv_refresh', 'rmv_show', 'rmv_user', 'rmv_colors', 'rmv_color',
+        'rmv_save', 'rmv_chains', 'rmv_reset',
+    ]
+    
+    def _make_typo_handler(typo_name):
+        """Create a handler for a misspelled command that suggests the closest match."""
+        import difflib
+        def handler(*args, **kwargs):
+            matches = difflib.get_close_matches(typo_name, _RMV_COMMANDS, n=3, cutoff=0.5)
+            gui.logger.error(f"Unknown command: {typo_name}")
+            if matches:
+                gui.logger.info(f"Did you mean:")
+                for m in matches:
+                    gui.logger.info(f"  {m}")
+            else:
+                gui.logger.info("Type rmv_help for available commands")
+        return handler
+    
+    # Generate common misspelling prefixes and register them
+    _TYPO_PREFIXES = ['rmf_', 'rnv_', 'rmb_', 'rvm_', 'mrv_']
+    _CMD_SUFFIXES = [
+        'fetch', 'load_motif', 'load', 'toggle', 'sources', 'help', 'bg_color',
+        'summary', 'db', 'source', 'refresh', 'show', 'user', 'colors', 'color',
+        'save', 'chains', 'reset',
+    ]
+    _registered_typos = set()
+    for prefix in _TYPO_PREFIXES:
+        for suffix in _CMD_SUFFIXES:
+            typo = f"{prefix}{suffix}"
+            if typo not in _registered_typos and typo not in _RMV_COMMANDS:
+                try:
+                    cmd.extend(typo, _make_typo_handler(typo))
+                    _registered_typos.add(typo)
+                except Exception:
+                    pass
     
     gui.logger.success("RNA Motif Visualizer GUI initialized")
     gui.logger.info("")
