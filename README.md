@@ -15,8 +15,6 @@ RNA Motif Visualizer is a PyMOL plugin designed for structural biologists and co
 **Key innovation:** A unified framework that standardizes heterogeneous RNA motif annotations across multiple databases and tools, enabling automated, structurally consistent visualization and comparative analysis within PyMOL.
 
 ---
----
-
 ## 📦 Installation
 
 ### Step 1: Download
