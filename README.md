@@ -113,7 +113,7 @@ rmv_save ALL             # Batch export all motif instances
 | `rmv_fetch <PDB_ID> cif_use_auth=0` | Load with mmCIF label chain IDs |
 | `rmv_load_motif` | Fetch motif data from selected source |
 | `rmv_db <N>` | Select data source by ID (1-7) |
-| `rmv_db <N> /path/to/data` | Select source with custom data path (5-7) |
+| **`rmv_db <N> /path/to/data` | Select source with custom data path (5–7)**
 | `rmv_sources` | List all available sources with descriptions |
 | `rmv_load <PDB_ID>` | Load structure with auto-visualization |
 | `rmv_refresh` | Force re-fetch from API (bypass cache) |
