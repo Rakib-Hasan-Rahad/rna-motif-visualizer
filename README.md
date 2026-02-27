@@ -101,6 +101,18 @@ rmv_save current         # Save high-res PNG of current view
 rmv_save ALL             # Batch export all motif instances
 ```
 
+### 6. Export Motif Structures as mmCIF
+
+```
+rmv_save ALL cif         # Export all motif instances as mmCIF
+rmv_save HL cif          # Export all hairpin loop instances as mmCIF
+rmv_save HL 3 cif        # Export HL instance #3 as mmCIF
+```
+
+> **Note:** mmCIF export extracts _original_ coordinates from the on-disk CIF file,
+> not PyMOL's internal coordinates (which may be slightly modified). Each exported
+> file is a standalone mmCIF that can be loaded independently in any molecular viewer.
+
 ---
 
 ## 📖 Complete Command Reference
@@ -158,6 +170,14 @@ rmv_save ALL             # Batch export all motif instances
 | `rmv_save current` | Export current PyMOL view as PNG (~300 dpi) |
 | `rmv_save ALL` | Batch export all motif instances |
 | `rmv_save <TYPE> <NO> [rep]` | Save specific instance with representation |
+
+### mmCIF Structure Export
+
+| Command | Description |
+|---------|-------------|
+| `rmv_save ALL cif` | Export all motif instances as mmCIF |
+| `rmv_save <TYPE> cif` | Export all instances of a motif type as mmCIF |
+| `rmv_save <TYPE> <NO> cif` | Export specific instance as mmCIF |
 
 ---
 
@@ -244,6 +264,7 @@ rmv_db 5                        # Select FR3D annotations
 rmv_load_motif                   # Load FR3D data
 rmv_show "INTERNAL LOOP"        # View your predictions
 rmv_save ALL                    # Export for validation report
+rmv_save ALL cif                # Extract mmCIF structures
 ```
 
 ### Workflow 2: Compare Multiple Databases
@@ -274,6 +295,7 @@ rmv_show "SARCIN-RICIN"
 cmd.hide("ribbon")
 cmd.show("sticks")
 rmv_save current                # ~300 dpi PNG ready for journal
+rmv_save HL 3 cif               # Extract motif structure as mmCIF
 ```
 
 ---

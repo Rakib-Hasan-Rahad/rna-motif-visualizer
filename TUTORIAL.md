@@ -459,6 +459,26 @@ rmv_save current              # High-res: 2400×1800, 300 DPI
 rmv_save current my_view      # Save to custom filename
 ```
 
+### Export Motif Structures as mmCIF
+
+Extract motif instances as standalone mmCIF files with **original coordinates**
+from the on-disk CIF file (not PyMOL's internal coordinates, which may be
+slightly modified during loading).
+
+```
+rmv_save ALL cif              # Export ALL motif instances as mmCIF
+rmv_save HL cif               # Export all hairpin loop instances as mmCIF
+rmv_save HL 3 cif             # Export HL instance #3 as mmCIF
+```
+
+Structures are saved to `motif_structures/<PDB_ID>/<MOTIF_TYPE>/` inside the plugin directory.
+Each `.cif` file is a standalone mmCIF that can be loaded independently:
+
+```
+# Load an exported motif in a fresh PyMOL session
+cmd.load("motif_structures/1s72/HL/HL-3-0_55-64.cif")
+```
+
 ### Available Representations
 
 | Representation | Description |
@@ -474,6 +494,7 @@ rmv_save current my_view      # Save to custom filename
 
 ### Output Folder Structure
 
+**Images** (`motif_images/`):
 ```
 motif_images/
 └── 1s72/
@@ -485,6 +506,19 @@ motif_images/
     │   ├── GNRA_instance_1.png
     │   └── ...
     └── current_view.png
+```
+
+**mmCIF Structures** (`motif_structures/`):
+```
+motif_structures/
+└── 1s72/
+    ├── HL/
+    │   ├── HL-1-0_55-64.cif
+    │   ├── HL-2-0_120-135.cif
+    │   └── ...
+    └── GNRA/
+        ├── GNRA-1-0_55-64.cif
+        └── ...
 ```
 
 ---
@@ -598,6 +632,7 @@ rmv_show GNRA 2                # Zoom to instance 2
 rmv_show ALL                    # Show all motif types
 rmv_save GNRA sticks           # Save all GNRA images as sticks
 rmv_save current               # Save current view
+rmv_save GNRA cif              # Export GNRA structures as mmCIF
 ```
 
 ### The Legacy `rmv_load` Command
@@ -634,6 +669,7 @@ This clears the entire PyMOL session (all objects, selections) and resets the pl
 | Zoom | `rmv_show <TYPE> <N>` | Zoom to instance |
 | Show All | `rmv_show ALL` | Show all motif types with objects |
 | Save | `rmv_save ALL` | Save all motif images |
+| Save | `rmv_save ALL cif` | Export all motif structures as mmCIF |
 | Save | `rmv_save current` | Save current view (high-res) |
 | Help | `rmv_help` | Full command reference |
 | Info | `rmv_sources` | List all data sources |

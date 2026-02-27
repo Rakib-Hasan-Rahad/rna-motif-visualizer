@@ -30,6 +30,7 @@ PyMOL
 ├── loader.py              Visualization pipeline (StructureLoader, UnifiedMotifLoader, VisualizationManager)
 ├── colors.py              30+ motif color definitions + custom color support
 ├── image_saver.py         PNG export with multiple representations
+├── structure_exporter.py   mmCIF export (original coordinates from disk)
 ├── database/
 │   ├── config.py          SOURCE_ID_MAP (7 sources), SourceMode, PluginConfig
 │   ├── base_provider.py   ResidueSpec, MotifInstance, MotifType, BaseProvider ABC
@@ -75,6 +76,9 @@ rmv_show <TYPE>  →  VisualizationManager.show_motif_type()
 
 rmv_save <TYPE>  →  ImageSaver.save_motif_images()
                      └── render + ray + png for each instance
+
+rmv_save <TYPE> cif  →  StructureExporter.export_instance()
+                     └── parse original CIF → filter _atom_site → write mmCIF
 ```
 
 ---
@@ -90,6 +94,7 @@ rmv_save <TYPE>  →  ImageSaver.save_motif_images()
 | `plugin.py` | ~120 | Entry point, cif_use_auth lock, welcome banner |
 | `colors.py` | ~330 | MOTIF_COLORS dict, custom overrides, PyMOL color application |
 | `image_saver.py` | ~580 | PNG export for individual motif instances + current view |
+| `structure_exporter.py` | ~350 | mmCIF export — extracts original coordinates from disk CIF |
 | `__init__.py` | ~45 | Package metadata, lazy imports |
 | `atlas_loader.py` | legacy | Old atlas loader (superseded by database/atlas_provider.py) |
 | `pdb_motif_mapper.py` | legacy | Old PDB-to-motif mapper |
@@ -430,21 +435,30 @@ Prints the full command reference box.
 
 ### Save & Export
 
-#### `rmv_save <ALL|TYPE|TYPE NO|current> [representation] [filename]`
+#### `rmv_save <ALL|TYPE|TYPE NO|current> [representation|cif] [filename]`
 
-Saves motif instance images to disk.
+Saves motif instance images **or** exports motif structures as mmCIF.
 
 **Implementation:** `save_motif_images()` → dispatches to:
 - `ALL`: `gui.save_all_motif_images_action(representation)`
 - `TYPE`: `gui.save_motif_type_images_action(type, representation)`
 - `TYPE NO`: `gui.save_motif_instance_by_id_action(type, no, representation)`
 - `current`: `gui.save_current_view_action(filename)` — 2400×1800, 300 DPI
+- `ALL cif`: `gui.export_all_motif_structures_action()`
+- `TYPE cif`: `gui.export_motif_type_structures_action(type)`
+- `TYPE NO cif`: `gui.export_motif_instance_by_id_action(type, no)`
 
-**Representations:** `cartoon` (default), `sticks`, `spheres`, `ribbon`, `lines`, `licorice`, `surface`, `cartoon+sticks`
+**Representations (image save):** `cartoon` (default), `sticks`, `spheres`, `ribbon`, `lines`, `licorice`, `surface`, `cartoon+sticks`
 
-**Output directory:** `motif_images/<pdb_id>/<MOTIF_TYPE>/`
+**Output directories:**
+- Images: `motif_images/<pdb_id>/<MOTIF_TYPE>/`
+- Structures: `motif_structures/<pdb_id>/<MOTIF_TYPE>/`
 
-**Example:**
+**mmCIF export** extracts original coordinates from the on-disk CIF file
+(not PyMOL's internal coordinates). Implemented in `structure_exporter.py` →
+`MotifStructureExporter` class.
+
+**Example (image save):**
 ```
 rmv_save ALL                     # All motifs, cartoon
 rmv_save ALL sticks              # All motifs, sticks
@@ -452,6 +466,13 @@ rmv_save HL                      # All HL instances, cartoon
 rmv_save HL 3 spheres            # HL instance 3, spheres
 rmv_save current                 # Current view, auto filename
 rmv_save current my_view.png     # Current view, custom filename
+```
+
+**Example (mmCIF export):**
+```
+rmv_save ALL cif                 # All motifs as mmCIF
+rmv_save HL cif                  # All HL instances as mmCIF
+rmv_save HL 3 cif                # HL instance 3 as mmCIF
 ```
 
 ---
@@ -691,8 +712,23 @@ The `ImageSaver` class handles all PNG export:
 - **Current view:** Captures the PyMOL viewport as-is
   - Size: 2400×1800, 300 DPI (high-res)
 
-### Output Folder
+### Structure Exporter (`structure_exporter.py`)
 
+The `MotifStructureExporter` class exports motif instances as standalone mmCIF files:
+
+- Locates the **original CIF file** on disk via PyMOL's `fetch_path`
+- Parses `_atom_site` column headers to find `auth_asym_id` and `auth_seq_id` indices
+- Filters atom records to only those matching the motif's (chain, residue) pairs
+- Copies all metadata blocks (`_cell`, `_symmetry`, `_entity`, etc.) from source
+- Writes a self-contained `.cif` file loadable in PyMOL or any molecular viewer
+
+**Why not use PyMOL's `cmd.save()`?** PyMOL may modify atomic coordinates slightly
+during loading (symmetry expansion, origin shifting). The exporter bypasses PyMOL
+entirely and reads/writes the raw CIF text.
+
+### Output Folders
+
+**Images** (`motif_images/`):
 ```
 motif_images/
 └── <pdb_id>/
@@ -701,6 +737,17 @@ motif_images/
     │   ├── <TYPE>_instance_2.png
     │   └── ...
     └── current_view_<timestamp>.png
+```
+
+**Structures** (`motif_structures/`):
+```
+motif_structures/
+└── <pdb_id>/
+    ├── <MOTIF_TYPE>/
+    │   ├── <TYPE>-1-<chain>-<residues>.cif
+    │   ├── <TYPE>-2-<chain>-<residues>.cif
+    │   └── ...
+    └── ...
 ```
 
 ---

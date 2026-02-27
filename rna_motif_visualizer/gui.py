@@ -1047,7 +1047,73 @@ class MotifVisualizerGUI:
                 self.logger.error(f"Failed to save current view")
         except Exception as e:
             self.logger.error(f"Failed to save current view: {e}")
-    
+
+    # ------------------------------------------------------------------
+    # Structure export (mmCIF) action methods
+    # ------------------------------------------------------------------
+
+    def export_all_motif_structures_action(self):
+        """Export all loaded motif instances as mmCIF files (original coordinates)."""
+        try:
+            success = self.viz_manager.export_all_motif_structures()
+            if success:
+                self.logger.success("All motif structures exported as mmCIF")
+            else:
+                self.logger.error("Failed to export motif structures")
+        except Exception as e:
+            self.logger.error(f"Failed to export motif structures: {e}")
+
+    def export_motif_type_structures_action(self, motif_type):
+        """Export all instances of a specific motif type as mmCIF."""
+        try:
+            motif_type = motif_type.upper().strip()
+            loaded_motifs = self.viz_manager.motif_loader.get_loaded_motifs()
+
+            if not loaded_motifs:
+                self.logger.error("No motifs loaded")
+                return
+
+            if motif_type not in loaded_motifs:
+                self.logger.error(f"Motif type '{motif_type}' not found")
+                self.logger.info(f"Available: {', '.join(sorted(loaded_motifs.keys()))}")
+                return
+
+            success = self.viz_manager.export_motif_type_structures(motif_type)
+            if success:
+                self.logger.success(f"Exported {motif_type} structures as mmCIF")
+            else:
+                self.logger.error(f"Failed to export {motif_type} structures")
+        except Exception as e:
+            self.logger.error(f"Failed to export motif structures: {e}")
+
+    def export_motif_instance_by_id_action(self, motif_type, instance_id):
+        """Export a specific motif instance as mmCIF."""
+        try:
+            motif_type = motif_type.upper().strip()
+            loaded_motifs = self.viz_manager.motif_loader.get_loaded_motifs()
+
+            if not loaded_motifs:
+                self.logger.error("No motifs loaded")
+                return
+
+            if motif_type not in loaded_motifs:
+                self.logger.error(f"Motif type '{motif_type}' not found")
+                self.logger.info(f"Available: {', '.join(sorted(loaded_motifs.keys()))}")
+                return
+
+            motif_instances = loaded_motifs[motif_type]['motif_details']
+            if instance_id < 1 or instance_id > len(motif_instances):
+                self.logger.error(f"Instance ID {instance_id} out of range (1-{len(motif_instances)})")
+                return
+
+            success = self.viz_manager.export_motif_instance_structure(motif_type, instance_id)
+            if success:
+                self.logger.success(f"Exported {motif_type} instance #{instance_id} as mmCIF")
+            else:
+                self.logger.error(f"Failed to export {motif_type} instance #{instance_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to export motif instance: {e}")
+
     def get_available_motifs(self):
         """
         Get list of available motif types for current PDB.
@@ -1305,6 +1371,12 @@ class MotifVisualizerGUI:
         print("│  rmv_save current <FILE>   Save current view to specific filename       │")
         print("│  [rep]: cartoon (default), sticks, spheres, ribbon, lines, etc.         │")
         print("│                            (Output: plugin_dir/motif_images/pdb_id/)    │")
+        print("│                                                                          │")
+        print("│  mmCIF Structure Export (original coordinates from disk):                │")
+        print("│  rmv_save ALL cif          Export all motif structures as mmCIF          │")
+        print("│  rmv_save <TYPE> cif       Export all instances of type as mmCIF         │")
+        print("│  rmv_save <TYPE> <NO> cif  Export specific instance as mmCIF             │")
+        print("│                            (Output: plugin_dir/motif_structures/pdb_id/)│")
         print("├" + "─"*78 + "┤")
         print("│  📊 INFORMATION COMMANDS                                                │")
         print("├" + "─"*78 + "┤")
@@ -1354,6 +1426,11 @@ class MotifVisualizerGUI:
         print("  5. Save specific instance:")
         print("     rmv_save HL 1              Save hairpin loop instance #1")
         print("     rmv_save current           Save current view (high-res)")
+        print()
+        print("  6. Export motif structures as mmCIF (original coordinates):")
+        print("     rmv_save ALL cif           Export all motif structures")
+        print("     rmv_save HL cif            Export all hairpin loop structures")
+        print("     rmv_save HL 3 cif          Export HL instance #3 structure")
         print()
 
     def get_available_motifs(self):
@@ -2997,9 +3074,9 @@ def initialize_gui():
     cmd.extend('rmv_color', set_motif_color)
     
     def save_motif_images(argument=''):
-        """PyMOL command: Save motif instance images to organized folders.
+        """PyMOL command: Save motif instance images or extract mmCIF structures.
         
-        Usage:
+        Usage (images):
             rmv_save ALL                      Save all motif types and instances (default: cartoon)
             rmv_save ALL sticks               Save all motifs as sticks representation
             rmv_save HL                       Save all hairpin loop instances (default: cartoon)
@@ -3009,7 +3086,16 @@ def initialize_gui():
             rmv_save current                  Save current PyMOL view
             rmv_save current my_view.png      Save current view to file
         
-        Available representations:
+        Usage (mmCIF structure export):
+            rmv_save ALL cif                  Export all motif instances as mmCIF
+            rmv_save HL cif                   Export all HL instances as mmCIF
+            rmv_save HL 3 cif                 Export 3rd HL instance as mmCIF
+        
+        mmCIF export extracts ORIGINAL coordinates from the on-disk CIF file,
+        NOT PyMOL's internal coordinates (which may be slightly modified).
+        Each exported file is a standalone mmCIF that can be loaded independently.
+        
+        Available representations (for image save):
             - cartoon       (default) - Shows RNA backbone ribbon
             - sticks        - Shows all atoms as sticks
             - spheres       - Shows all atoms as spheres
@@ -3020,31 +3106,32 @@ def initialize_gui():
             - cartoon+sticks - Combination of cartoon and sticks
         
         Output folder structure:
-            plugin_dir/motif_images/pdb_id/MOTIF_TYPE/instance_#_chain_residues.png
-        
-        Each image is named with:
-            - Instance number (as shown in rmv_summary)
-            - Chain identifier
-            - Residue range
-            - Optional annotation text
+            Images:     plugin_dir/motif_images/pdb_id/MOTIF_TYPE/<type>-<no>-<chain>-<residues>.png
+            Structures: plugin_dir/motif_structures/pdb_id/MOTIF_TYPE/<type>-<no>-<chain>-<residues>.cif
         """
         arguments = str(argument).strip().split()
         
         if not arguments:
-            print("\nUsage: rmv_save <ALL | MOTIF_TYPE | MOTIF_TYPE INSTANCE_ID | current> [representation]")
-            print("\nExamples:")
+            print("\nUsage: rmv_save <ALL | MOTIF_TYPE | MOTIF_TYPE INSTANCE_ID | current> [representation | cif]")
+            print("\n  IMAGE SAVE EXAMPLES:")
             print("  rmv_save ALL             Save all motif images (cartoon)")
             print("  rmv_save ALL sticks      Save all motif images (sticks)")
             print("  rmv_save HL              Save all hairpin loop images (cartoon)")
             print("  rmv_save HL sticks       Save all HL images (sticks)")
             print("  rmv_save HL 1            Save specific HL instance #1 (cartoon)")
             print("  rmv_save HL 1 spheres    Save specific HL instance #1 (spheres)")
-            print("  rmv_save IL              Save all internal loop images")
             print("  rmv_save current         Save current PyMOL view")
             print("  rmv_save current out.png Save current view to file")
+            print("\n  mmCIF STRUCTURE EXPORT:")
+            print("  rmv_save ALL cif         Export ALL motif structures as mmCIF")
+            print("  rmv_save HL cif          Export all HL instances as mmCIF")
+            print("  rmv_save HL 3 cif        Export HL instance #3 as mmCIF")
+            print("\n  Note: mmCIF export uses ORIGINAL coordinates from the on-disk CIF,")
+            print("        not PyMOL's internal coordinates.")
             print("\nRepresentations: cartoon, sticks, spheres, ribbon, lines, licorice, surface, cartoon+sticks")
-            print("\nOutput goes to: plugin_dir/motif_images/pdb_id/MOTIF_TYPE/")
-            print("Each image is labeled: <type>-<instance>-<chain>-<residues>.png")
+            print("\nOutput goes to:")
+            print("  Images:     plugin_dir/motif_images/pdb_id/MOTIF_TYPE/")
+            print("  Structures: plugin_dir/motif_structures/pdb_id/MOTIF_TYPE/")
             return
         
         pdb_id = gui.viz_manager.structure_loader.get_current_pdb_id()
@@ -3057,27 +3144,33 @@ def initialize_gui():
             gui.logger.error("No motifs loaded for this structure")
             return
         
-        # Parse representation parameter if provided
+        # Helper: check if a string is the 'cif' keyword
+        def _is_cif(s):
+            return s.lower() in ('cif', 'mmcif')
+        
         representation = 'cartoon'  # Default
         
         if arguments[0].upper() == 'ALL':
-            # rmv_save ALL [representation]
-            if len(arguments) > 1:
-                representation = arguments[1].lower()
-            gui.save_all_motif_images_action(representation=representation)
+            # rmv_save ALL [representation | cif]
+            if len(arguments) > 1 and _is_cif(arguments[1]):
+                gui.export_all_motif_structures_action()
+            else:
+                if len(arguments) > 1:
+                    representation = arguments[1].lower()
+                gui.save_all_motif_images_action(representation=representation)
+        
         elif arguments[0].upper() == 'CURRENT':
             # Save current view: rmv_save current [filename]
             if len(arguments) > 1:
                 filename = arguments[1]
             else:
-                # Default filename with timestamp
                 from datetime import datetime
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"pymol_view_{timestamp}.png"
-            
             gui.save_current_view_action(filename)
-        elif len(arguments) >= 2:
-            # Save motif type or specific instance: rmv_save <TYPE> [INSTANCE_ID] [representation]
+        
+        else:
+            # rmv_save <TYPE> [INSTANCE_ID] [representation | cif]
             motif_type = arguments[0].upper()
             
             if motif_type not in loaded_motifs:
@@ -3085,18 +3178,43 @@ def initialize_gui():
                 gui.logger.info(f"Available: {', '.join(sorted(loaded_motifs.keys()))}")
                 return
             
-            # Check if second argument is instance ID or representation
-            try:
-                instance_id = int(arguments[1])
-                # Second argument is instance ID
-                if len(arguments) > 2:
-                    representation = arguments[2].lower()
-                gui.save_motif_instance_by_id_action(motif_type, instance_id, 
-                                                    representation=representation)
-            except ValueError:
-                # Second argument is representation (not instance ID)
-                representation = arguments[1].lower()
+            if len(arguments) == 1:
+                # rmv_save HL  →  save all HL images (default cartoon)
                 gui.save_motif_type_images_action(motif_type, representation=representation)
+            
+            elif len(arguments) == 2:
+                arg2 = arguments[1]
+                if _is_cif(arg2):
+                    # rmv_save HL cif  →  export all HL structures
+                    gui.export_motif_type_structures_action(motif_type)
+                else:
+                    try:
+                        instance_id = int(arg2)
+                        # rmv_save HL 3  →  save HL instance #3 image
+                        gui.save_motif_instance_by_id_action(motif_type, instance_id,
+                                                            representation=representation)
+                    except ValueError:
+                        # rmv_save HL sticks  →  save all HL images as sticks
+                        representation = arg2.lower()
+                        gui.save_motif_type_images_action(motif_type, representation=representation)
+            
+            elif len(arguments) >= 3:
+                arg2 = arguments[1]
+                arg3 = arguments[2]
+                try:
+                    instance_id = int(arg2)
+                    if _is_cif(arg3):
+                        # rmv_save HL 3 cif  →  export HL instance #3 as mmCIF
+                        gui.export_motif_instance_by_id_action(motif_type, instance_id)
+                    else:
+                        # rmv_save HL 3 spheres  →  save HL instance #3 as spheres
+                        representation = arg3.lower()
+                        gui.save_motif_instance_by_id_action(motif_type, instance_id,
+                                                            representation=representation)
+                except ValueError:
+                    # arg2 is not an integer — treat as representation
+                    representation = arg2.lower()
+                    gui.save_motif_type_images_action(motif_type, representation=representation)
     
     cmd.extend('rmv_save', save_motif_images)
     

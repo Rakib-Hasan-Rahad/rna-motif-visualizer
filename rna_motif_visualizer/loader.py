@@ -1672,3 +1672,98 @@ class VisualizationManager:
         except Exception as e:
             self.logger.error(f"Failed to save current view: {e}")
             return False
+
+    # ------------------------------------------------------------------
+    # Structure export (mmCIF) methods
+    # ------------------------------------------------------------------
+
+    def export_all_motif_structures(self) -> bool:
+        """Export all loaded motif instances as mmCIF files.
+
+        Extracts ORIGINAL coordinates from the on-disk CIF file.
+
+        Returns:
+            True if any instances were exported successfully.
+        """
+        try:
+            from .structure_exporter import MotifStructureExporter
+
+            loaded_motifs = self.motif_loader.get_loaded_motifs()
+            if not loaded_motifs:
+                self.logger.warning("No motifs loaded to export")
+                return False
+
+            pdb_id = self.structure_loader.get_current_pdb_id()
+            if not pdb_id:
+                self.logger.error("No structure loaded")
+                return False
+
+            exporter = MotifStructureExporter(self.cmd)
+            stats = exporter.export_all_motifs(loaded_motifs, pdb_id)
+            return stats.get('total_saved', 0) > 0
+
+        except Exception as e:
+            self.logger.error(f"Failed to export motif structures: {e}")
+            return False
+
+    def export_motif_type_structures(self, motif_type: str) -> bool:
+        """Export all instances of a specific motif type as mmCIF files.
+
+        Args:
+            motif_type: Motif type to export (e.g., 'HL', 'IL').
+
+        Returns:
+            True if any instances were exported successfully.
+        """
+        try:
+            from .structure_exporter import MotifStructureExporter
+
+            loaded_motifs = self.motif_loader.get_loaded_motifs()
+            if not loaded_motifs:
+                self.logger.warning("No motifs loaded to export")
+                return False
+
+            pdb_id = self.structure_loader.get_current_pdb_id()
+            if not pdb_id:
+                self.logger.error("No structure loaded")
+                return False
+
+            exporter = MotifStructureExporter(self.cmd)
+            stats = exporter.export_motif_type(loaded_motifs, motif_type, pdb_id)
+            return stats.get('saved', 0) > 0
+
+        except Exception as e:
+            self.logger.error(f"Failed to export {motif_type} structures: {e}")
+            return False
+
+    def export_motif_instance_structure(self, motif_type: str,
+                                        instance_id: int) -> bool:
+        """Export a specific motif instance as mmCIF file.
+
+        Args:
+            motif_type: Motif type (e.g., 'HL', 'IL').
+            instance_id: Instance number (1-based).
+
+        Returns:
+            True if exported successfully.
+        """
+        try:
+            from .structure_exporter import MotifStructureExporter
+
+            loaded_motifs = self.motif_loader.get_loaded_motifs()
+            if not loaded_motifs:
+                self.logger.warning("No motifs loaded to export")
+                return False
+
+            pdb_id = self.structure_loader.get_current_pdb_id()
+            if not pdb_id:
+                self.logger.error("No structure loaded")
+                return False
+
+            exporter = MotifStructureExporter(self.cmd)
+            return exporter.export_motif_instance(
+                loaded_motifs, motif_type, instance_id, pdb_id)
+
+        except Exception as e:
+            self.logger.error(f"Failed to export {motif_type} #{instance_id}: {e}")
+            return False
