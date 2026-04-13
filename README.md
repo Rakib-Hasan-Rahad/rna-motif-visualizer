@@ -95,7 +95,7 @@ rmv_view K-TURN          # Step 8: Highlight all K-TURN motifs (copy the motif f
 rmv_view K-TURN 2        # Step 9: Highlight specific motif instance with ID
 rmv_summary HL           # Step 10: Show hairpin loop instances
 rmv_show HL              # Step 11: Render all hairpin loops
-rmv_show HL 1            # Step 12: Zoom to specific instance
+rmv_show HL 1, padding=2 # Step 12: Zoom to specific instance, add padding argument if required. 
 ```
 
 ### 3. Explore Individual Instances
