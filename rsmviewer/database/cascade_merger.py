@@ -171,15 +171,17 @@ def _annotate_overlap(ref_inst: MotifInstance, discarded_inst: MotifInstance) ->
         return
     
     also = ref_inst.metadata.get('_also_found_in', [])
+    ref_label = ref_inst.metadata.get('_source_label', '')
     
     # Add the discarded instance's own source label
+    # Skip if it matches the ref's own primary source label (same-source subset)
     d_label = discarded_inst.metadata.get('_source_label', '')
-    if d_label and d_label not in also:
+    if d_label and d_label not in also and d_label != ref_label:
         also.append(d_label)
     
     # Propagate any _also_found_in from the discarded instance (3+ source cascade)
     for label in discarded_inst.metadata.get('_also_found_in', []):
-        if label and label not in also:
+        if label and label not in also and label != ref_label:
             also.append(label)
     
     ref_inst.metadata['_also_found_in'] = also
@@ -263,6 +265,13 @@ class CascadeMerger:
             f"{self._count_motifs(result)} motifs in {len(result)} categories"
         )
         
+        # Final pass: remove subset instances within the same category.
+        # The pairwise merge only checks updater-vs-ref.  Two instances from
+        # the SAME source (both ref) are never compared during the cascade,
+        # so a small instance can survive even though it is a complete subset
+        # of a larger instance from the same source.
+        result = self._deduplicate_subsets(result)
+        
         return result
     
     def _pairwise_merge(
@@ -305,7 +314,7 @@ class CascadeMerger:
                     bucket.append((mtype.upper(), inst, rset))
 
         # Check each updater motif against same-base-category ref motifs
-        stats = {'kept': 0, 'discarded': 0}
+        stats = {'kept': 0, 'discarded': 0, 'subsumed': 0, 'replaced': 0}
 
         for u_type, u_instances in updater.items():
             u_key = u_type.upper()
@@ -320,7 +329,7 @@ class CascadeMerger:
                     stats['kept'] += 1
                     continue
 
-                # Compare within same base category only
+                # --- Phase 1: Standard Jaccard overlap ---
                 is_overlap = False
                 best_j = 0.0
                 best_ref_inst = None
@@ -343,15 +352,95 @@ class CascadeMerger:
                         f"'{u_key}/{u_inst.instance_id}' - overlaps with "
                         f"{ref_label} category '{u_cat}' (Jaccard={best_j:.3f})"
                     )
+                    continue
+
+                # --- Phase 2: Asymmetric containment (subset check) ---
+                # If standard Jaccard < threshold, one set may still be a
+                # complete subset of the other (e.g. 2 residues inside 11).
+                # When |A ∩ B| / |smaller| = 1.0 the smaller set adds no new
+                # information — keep the larger, discard the smaller.
+                containment_action = None
+
+                for _r_key, r_inst, r_rset in same_cat_refs:
+                    if not r_rset:
+                        continue
+                    if u_rset.issubset(r_rset):
+                        # Updater fully contained in ref → discard updater
+                        containment_action = ('discard_updater', r_inst, _r_key, r_rset)
+                        break
+                    elif r_rset.issubset(u_rset):
+                        # Ref fully contained in updater → replace ref with updater
+                        containment_action = ('replace_ref', r_inst, _r_key, r_rset)
+                        break
+
+                if containment_action:
+                    action, c_ref_inst, c_ref_key, c_ref_rset = containment_action
+                    if action == 'discard_updater':
+                        stats['subsumed'] += 1
+                        _annotate_overlap(c_ref_inst, u_inst)
+                        logger.debug(
+                            f"[CASCADE] Subsumed {updater_label} motif "
+                            f"'{u_key}/{u_inst.instance_id}' - subset of "
+                            f"{ref_label} '{u_cat}' ({len(u_rset)}/{len(c_ref_rset)} residues)"
+                        )
+                    else:
+                        # Replace smaller ref with larger updater's residues,
+                        # but keep ref's KEY (priority naming convention).
+                        stats['replaced'] += 1
+                        # Remove ref instance from merged
+                        if c_ref_key in merged:
+                            merged[c_ref_key] = [
+                                inst for inst in merged[c_ref_key]
+                                if inst is not c_ref_inst
+                            ]
+                            if not merged[c_ref_key]:
+                                del merged[c_ref_key]
+                        # Use updater's residues but file under REF's key
+                        # (preserves priority source naming convention)
+                        merged.setdefault(c_ref_key, []).append(u_inst)
+                        # Build combined source label (e.g. "NoBIAS + RMSX")
+                        # Cannot use _annotate_overlap here because we need
+                        # to relabel _source_label to the ref's (priority)
+                        # label.  _annotate_overlap would add the ref's label
+                        # to _also_found_in, and the subsequent relabel would
+                        # make _source_label == _also_found_in entry, which
+                        # the display layer deduplicates → losing the updater
+                        # attribution entirely.  Instead, manually build
+                        # _also_found_in with the updater's original label.
+                        upd_label_str = u_inst.metadata.get('_source_label', '')
+                        ref_label_str = c_ref_inst.metadata.get('_source_label', '')
+                        # Set primary label to ref's (priority) label
+                        if ref_label_str:
+                            u_inst.metadata['_source_label'] = ref_label_str
+                        # _also_found_in: updater's original label + propagated
+                        also = list(u_inst.metadata.get('_also_found_in', []))
+                        if upd_label_str and upd_label_str != ref_label_str and upd_label_str not in also:
+                            also.append(upd_label_str)
+                        for lbl in c_ref_inst.metadata.get('_also_found_in', []):
+                            if lbl and lbl != ref_label_str and lbl not in also:
+                                also.append(lbl)
+                        u_inst.metadata['_also_found_in'] = also
+                        # Update ref_by_cat so future comparisons use the larger set
+                        cat_list = ref_by_cat.get(u_cat, [])
+                        for idx, (rk, ri, rs) in enumerate(cat_list):
+                            if ri is c_ref_inst:
+                                cat_list[idx] = (c_ref_key, u_inst, u_rset)
+                                break
+                        logger.debug(
+                            f"[CASCADE] Replaced {ref_label} motif "
+                            f"'{c_ref_key}' with larger {updater_label} "
+                            f"'{u_key}/{u_inst.instance_id}' "
+                            f"({len(c_ref_rset)} → {len(u_rset)} residues)"
+                        )
                 else:
-                    # Unique – keep under updater's original key
+                    # Truly unique – keep under updater's original key
                     merged.setdefault(u_key, []).append(u_inst)
                     stats['kept'] += 1
 
         logger.info(
             f"[CASCADE] Pairwise merge {ref_label} + {updater_label}: "
-            f"kept {stats['kept']} from {updater_label}, "
-            f"discarded {stats['discarded']} overlapping"
+            f"kept {stats['kept']}, discarded {stats['discarded']} (Jaccard), "
+            f"subsumed {stats['subsumed']}, replaced {stats['replaced']}"
         )
 
         return merged
@@ -359,3 +448,80 @@ class CascadeMerger:
     def _count_motifs(self, motifs: Dict[str, List[MotifInstance]]) -> int:
         """Count total motif instances across all types."""
         return sum(len(instances) for instances in motifs.values())
+
+    # ------------------------------------------------------------------
+    # Post-merge subset deduplication
+    # ------------------------------------------------------------------
+    def _deduplicate_subsets(
+        self,
+        motifs: Dict[str, List[MotifInstance]],
+    ) -> Dict[str, List[MotifInstance]]:
+        """
+        Remove instances whose residue set is a complete subset of another
+        instance in the **same base category**.
+
+        This catches subset pairs that the pairwise merge cannot see — e.g.
+        two instances from the same source where one has 2 residues and the
+        other has 11 residues that fully contain the first two.
+
+        The larger (superset) instance is kept and annotated with the
+        smaller instance's source info.  If both sets are identical this
+        is a no-op (within-source exact dedup already ran).
+        """
+        # Group ALL instances across keys by base category
+        # Each entry: (original_key, instance, residue_set, list_ref)
+        by_cat: Dict[str, List[Tuple[str, MotifInstance, Set]]] = {}
+        for mtype, instances in motifs.items():
+            cat = _get_base_category(mtype)
+            bucket = by_cat.setdefault(cat, [])
+            for inst in instances:
+                rset = _get_residue_set(inst)
+                if rset:
+                    bucket.append((mtype, inst, rset))
+
+        # For each category, find strict subset pairs
+        to_remove: Set[int] = set()          # id(inst) of instances to drop
+        total_subsumed = 0
+
+        for cat, entries in by_cat.items():
+            n = len(entries)
+            if n < 2:
+                continue
+            # Sort by residue-set size descending so we compare smaller
+            # against larger first.  This is O(n^2) but n is typically small.
+            entries_sorted = sorted(entries, key=lambda e: len(e[2]), reverse=True)
+            for i in range(n):
+                if id(entries_sorted[i][1]) in to_remove:
+                    continue
+                i_key, i_inst, i_rset = entries_sorted[i]
+                for j in range(i + 1, n):
+                    if id(entries_sorted[j][1]) in to_remove:
+                        continue
+                    j_key, j_inst, j_rset = entries_sorted[j]
+                    # j is same size or smaller (sorted desc)
+                    if j_rset.issubset(i_rset) and j_rset != i_rset:
+                        # j is a strict subset of i → remove j, annotate i
+                        to_remove.add(id(j_inst))
+                        _annotate_overlap(i_inst, j_inst)
+                        total_subsumed += 1
+                        logger.debug(
+                            f"[CASCADE] Post-merge: subsumed '{j_key}' "
+                            f"({len(j_rset)} residues) into '{i_key}' "
+                            f"({len(i_rset)} residues) in category '{cat}'"
+                        )
+
+        if total_subsumed == 0:
+            return motifs
+
+        # Rebuild motif dict without subsumed instances
+        cleaned: Dict[str, List[MotifInstance]] = {}
+        for mtype, instances in motifs.items():
+            surviving = [inst for inst in instances if id(inst) not in to_remove]
+            if surviving:
+                cleaned[mtype] = surviving
+
+        logger.info(
+            f"[CASCADE] Post-merge subset dedup: removed {total_subsumed} "
+            f"subset instance(s)"
+        )
+        return cleaned

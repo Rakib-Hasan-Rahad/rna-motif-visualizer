@@ -102,16 +102,10 @@ def __init_plugin__(app):
         # Initialize registry - this registers all available providers
         registry = initialize_registry(str(database_dir))
         
-        # Get summary of registered databases
+        # Build compact summary of registered databases
         providers = registry.get_all_providers()
-        total_pdbs = sum(len(p.get_available_pdb_ids()) for p in providers.values())
-        total_motif_types = sum(len(p.get_available_motif_types()) for p in providers.values())
-        
-        logger.success(f"Loaded {len(providers)} database(s)")
-        for pid, provider in providers.items():
-            logger.debug(f"  {pid}: {provider.info.name} - "
-                        f"{len(provider.get_available_motif_types())} motif types, "
-                        f"{len(provider.get_available_pdb_ids())} PDB structures")
+        source_names = [p.info.name for p in providers.values()]
+        logger.success(f"Loaded {len(providers)} sources: {', '.join(source_names)}")
         
     except Exception as e:
         logger.error(f"Error initializing database registry: {e}")

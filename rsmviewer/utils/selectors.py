@@ -41,7 +41,61 @@ class MotifSelector:
         """
         self.cmd = cmd
         self.logger = get_logger()
-    
+
+    def create_object_from_entries(self, obj_name, structure_name, chain_residue_entries):
+        """Create a PyMOL object from exact chain/residue entries.
+
+        Args:
+            obj_name (str): Name for the new PyMOL object
+            structure_name (str): Name of the loaded structure
+            chain_residue_entries (list): List of (chain, residues_list) tuples
+
+        Returns:
+            str: Name of created object, or None if failed
+        """
+        if not chain_residue_entries:
+            return None
+
+        try:
+            selections = []
+            segi_selections = []
+            for chain, residues in chain_residue_entries:
+                sel = SelectionParser.create_selection_string(
+                    chain, sorted(set(residues)), structure_name=structure_name)
+                if sel:
+                    selections.append(f"({sel})")
+                segi_sel = SelectionParser.create_selection_string(
+                    chain, sorted(set(residues)), structure_name=structure_name, use_segi=True)
+                if segi_sel:
+                    segi_selections.append(f"({segi_sel})")
+
+            if not selections:
+                return None
+
+            combined = " or ".join(selections)
+            full_selection = f"(model {structure_name}) and ({combined})"
+            self.cmd.create(obj_name, full_selection)
+
+            # Layer 3: segi fallback
+            atom_count = self.cmd.count_atoms(obj_name)
+            if atom_count == 0 and segi_selections:
+                segi_combined = " or ".join(segi_selections)
+                segi_full = f"(model {structure_name}) and ({segi_combined})"
+                segi_count = self.cmd.count_atoms(segi_full)
+                if segi_count > 0:
+                    self.cmd.delete(obj_name)
+                    self.cmd.create(obj_name, segi_full)
+                    atom_count = segi_count
+
+            if atom_count == 0:
+                self.cmd.delete(obj_name)
+                return None
+
+            return obj_name
+        except Exception as e:
+            self.logger.error(f"Failed to create object {obj_name}: {e}")
+            return None
+
     def create_motif_object(self, structure_name, motif_type, motif_id, chain, residues, source_suffix=''):
         """
         Create a PyMOL object for a single motif.
@@ -136,67 +190,27 @@ class MotifSelector:
             pdb_tag = f"_{pdb_id.upper()}" if pdb_id else ""
             obj_name = sanitize_pymol_name(f"{motif_type}_ALL{pdb_tag}{source_suffix}")
             
-            # Collect all selection strings with Layer 2 validation
-            selections = []
+            entries = []
             for motif in motif_list:
                 if not validate_motif_data(motif):
                     self.logger.warning(f"Skipping invalid motif: {motif}")
                     continue
-                
-                chain = motif.get('chain')
-                residues = motif.get('residues')
-                
-                selection = SelectionParser.create_selection_string(
-                    chain, residues, structure_name=structure_name
-                )
-                if selection:
-                    selections.append((selection, chain, residues))
-            
-            if not selections:
+
+                entries.append((motif.get('chain'), motif.get('residues')))
+
+            if not entries:
                 self.logger.warning(f"No valid selections found for {motif_type}")
                 return None
-            
-            # Combine all selections with OR
-            combined_selection = " or ".join([f"({s})" for s, _, _ in selections])
-            full_selection = f"(model {structure_name}) and ({combined_selection})"
-            
-            # Create combined object
-            self.cmd.create(obj_name, full_selection)
-            
-            # Layer 3: Verify atoms were found, try segi fallback if not
-            atom_count = self.cmd.count_atoms(obj_name)
-            if atom_count == 0:
-                self.logger.debug(
-                    f"No atoms found for {motif_type}_ALL, trying segi fallback..."
-                )
-                segi_selections = []
-                for _, chain, residues in selections:
-                    segi_sel = SelectionParser.create_selection_string(
-                        chain, residues, structure_name=structure_name, use_segi=True
-                    )
-                    if segi_sel:
-                        segi_selections.append(segi_sel)
-                
-                if segi_selections:
-                    segi_combined = " or ".join([f"({s})" for s in segi_selections])
-                    segi_full = f"(model {structure_name}) and ({segi_combined})"
-                    segi_count = self.cmd.count_atoms(segi_full)
-                    if segi_count > 0:
-                        self.cmd.delete(obj_name)
-                        self.cmd.create(obj_name, segi_full)
-                        self.logger.info(
-                            f"Recovered {segi_count} atoms for {motif_type}_ALL "
-                            f"using segi fallback"
-                        )
-                    else:
-                        self.logger.warning(
-                            f"No atoms found for {motif_type}_ALL via chain or segi. "
-                            f"Available chains: {self.cmd.get_chains(structure_name)}"
-                        )
-            else:
+
+            created = self.create_object_from_entries(
+                obj_name,
+                structure_name,
+                entries,
+            )
+            if created:
                 self.logger.info(f"Created motif object: {obj_name}")
-            
-            return obj_name
+
+            return created
         except Exception as e:
             self.logger.error(f"Failed to create motif class object {motif_type}: {e}")
             return None

@@ -23,6 +23,11 @@ from typing import Any, Dict, List, Optional
 from .base_provider import MotifInstance, ResidueSpec
 
 
+# Bump this whenever the provider data format changes so stale caches
+# produced by an earlier code version are automatically discarded.
+CACHE_VERSION = "2.1"
+
+
 @dataclass
 class CacheMetadata:
     """Metadata for a cached entry."""
@@ -30,7 +35,7 @@ class CacheMetadata:
     source: str
     fetched_at: str  # ISO format datetime
     expires_at: str  # ISO format datetime
-    version: str = "2.0"
+    version: str = CACHE_VERSION
     
     def is_expired(self) -> bool:
         """Check if this cache entry has expired."""
@@ -132,6 +137,11 @@ class CacheManager:
             with open(meta_path, 'r') as f:
                 meta = CacheMetadata.from_dict(json.load(f))
             
+            # Check version – discard caches written by older code
+            if meta.version != CACHE_VERSION:
+                self._remove_cache_entry(pdb_id, source)
+                return None
+
             # Check expiry
             if not ignore_expiry and meta.is_expired():
                 # Cache expired, remove it

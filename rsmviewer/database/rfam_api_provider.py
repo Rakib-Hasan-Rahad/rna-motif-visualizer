@@ -2,19 +2,18 @@
 RSMViewer - Rfam API Provider
 Fetches motif data from the Rfam REST API.
 
-API Endpoint: https://rfam.org/family/{RF_ID}/structures?content-type=application/json
-Returns JSON data with PDB structure mappings for RNA families.
+Downloads SEED alignments in Stockholm format from:
+  https://rfam.org/motif/{RM_ID}/alignment?acc={RM_ID}&alnType=seed&nseLabels=0&format=stockholm
 
-This provider enables visualization of named RNA motifs (GNRA, K-turn, T-loop, etc.)
-for structures that have Rfam annotations.
+The Stockholm data is parsed with the same StockholmConverter used by the
+local Rfam provider (Source 2), producing identical residue-level annotations.
 
 Author: Structural Biology Lab
-Version: 2.0.0
+Version: 2.1.0
 """
 
 from __future__ import annotations
 
-import json
 import ssl
 import urllib.request
 import urllib.error
@@ -28,6 +27,7 @@ from .base_provider import (
     MotifType,
     ResidueSpec,
 )
+from .converters import StockholmConverter
 
 
 class RfamAPIProvider(BaseProvider):
@@ -52,22 +52,44 @@ class RfamAPIProvider(BaseProvider):
     
     # Timeout for API requests (seconds)
     REQUEST_TIMEOUT = 30
-    
+
     # Mapping of Rfam motif IDs to readable names
-    # These are the main structural motifs in Rfam
+    # Complete set of all 34 Rfam structural motifs
     MOTIF_IDS = {
-        'RM00008': {'name': 'GNRA tetraloop', 'short': 'GNRA'},
-        'RM00029': {'name': 'UNCG tetraloop', 'short': 'UNCG'},
-        'RM00010': {'name': 'Kink-turn', 'short': 'K-turn'},
-        'RM00024': {'name': 'T-loop', 'short': 'T-loop'},
+        'RM00001': {'name': 'ANYA', 'short': 'ANYA'},
+        'RM00002': {'name': 'AUF1 binding', 'short': 'AUF1_binding'},
         'RM00003': {'name': 'C-loop', 'short': 'C-loop'},
-        'RM00030': {'name': 'U-turn', 'short': 'U-turn'},
-        'RM00021': {'name': 'Tandem GA/AG', 'short': 'tandem-GA'},
-        'RM00028': {'name': 'UMAC tetraloop', 'short': 'UMAC'},
+        'RM00004': {'name': 'CRC binding', 'short': 'CRC_binding'},
+        'RM00005': {'name': 'CsrA/RsmA binding', 'short': 'CsrA_binding'},
+        'RM00006': {'name': 'CUYG tetraloop', 'short': 'CUYG'},
         'RM00007': {'name': 'Splicing Domain V', 'short': 'Domain-V'},
+        'RM00008': {'name': 'GNRA tetraloop', 'short': 'GNRA'},
+        'RM00009': {'name': 'HuR binding', 'short': 'HuR_binding'},
+        'RM00010': {'name': 'Kink-turn', 'short': 'K-turn'},
+        'RM00011': {'name': 'Kink-turn type 2', 'short': 'K-turn-2'},
+        'RM00012': {'name': 'Pseudo-kink-turn', 'short': 'pK-turn'},
+        'RM00013': {'name': 'RBS B. subtilis', 'short': 'RBS_B_subtilis'},
+        'RM00014': {'name': 'RBS E. coli', 'short': 'RBS_E_coli'},
+        'RM00015': {'name': 'RBS H. pylori', 'short': 'RBS_H_pylori'},
+        'RM00016': {'name': 'Right angle type 2', 'short': 'right_angle-2'},
+        'RM00017': {'name': 'Right angle type 3', 'short': 'right_angle-3'},
+        'RM00018': {'name': 'Sarcin-ricin type 1', 'short': 'sarcin-ricin-1'},
+        'RM00019': {'name': 'Sarcin-ricin type 2', 'short': 'sarcin-ricin-2'},
+        'RM00020': {'name': 'SRP S domain', 'short': 'SRP_S_domain'},
+        'RM00021': {'name': 'Tandem GA/AG', 'short': 'tandem-GA'},
         'RM00022': {'name': 'Rho terminator 1', 'short': 'Terminator1'},
         'RM00023': {'name': 'Rho terminator 2', 'short': 'Terminator2'},
-        'RM00005': {'name': 'CsrA/RsmA binding', 'short': 'CsrA_binding'},
+        'RM00024': {'name': 'T-loop', 'short': 'T-loop'},
+        'RM00025': {'name': 'TRIT', 'short': 'TRIT'},
+        'RM00026': {'name': 'Twist-up', 'short': 'twist_up'},
+        'RM00027': {'name': 'UAA/GAN', 'short': 'UAA_GAN'},
+        'RM00028': {'name': 'UMAC tetraloop', 'short': 'UMAC'},
+        'RM00029': {'name': 'UNCG tetraloop', 'short': 'UNCG'},
+        'RM00030': {'name': 'U-turn', 'short': 'U-turn'},
+        'RM00031': {'name': 'VapC target', 'short': 'vapC_target'},
+        'RM00032': {'name': 'Docking elbow', 'short': 'docking_elbow'},
+        'RM00033': {'name': 'VTS1 binding', 'short': 'VTS1_binding'},
+        'RM00034': {'name': 'Roquin binding', 'short': 'Roquin_binding'},
     }
     
     def __init__(self, cache_manager=None):
@@ -88,8 +110,10 @@ class RfamAPIProvider(BaseProvider):
             source_type=DatabaseSourceType.API,
         )
         self.cache_manager = cache_manager
+        self._converter = StockholmConverter()
         self._fetched_pdbs: Set[str] = set()
-        self._motif_pdb_cache: Dict[str, Dict] = {}  # Cache of motif->PDB mappings
+        # motif RM ID -> {PDB_ID: [MotifInstance, ...]}
+        self._motif_instances_cache: Dict[str, Dict[str, List[MotifInstance]]] = {}
         self._pdb_motif_cache: Dict[str, Dict[str, List[MotifInstance]]] = {}  # pdb -> motifs
     
     @property
@@ -187,6 +211,9 @@ class RfamAPIProvider(BaseProvider):
         """
         Get instances of a specific Rfam motif in a PDB.
         
+        Downloads the motif SEED alignment in Stockholm format and parses
+        it with `StockholmConverter`, then filters for the requested PDB.
+        
         Args:
             pdb_id: PDB ID
             rfam_motif_id: Rfam motif ID (e.g., 'RM00008')
@@ -195,157 +222,70 @@ class RfamAPIProvider(BaseProvider):
         Returns:
             List of MotifInstance objects
         """
-        # First, get the PDB mappings for this motif family
-        pdb_mappings = self._get_pdb_mappings_for_motif(rfam_motif_id)
-        
-        if pdb_id not in pdb_mappings:
-            return []
-        
-        instances = []
-        mapping_data = pdb_mappings[pdb_id]
-        
-        # Create MotifInstance from mapping data
-        for idx, mapping in enumerate(mapping_data):
-            instance_id = f"{motif_info['short']}_{pdb_id}_{idx + 1:03d}"
-            
-            # Parse residue information from mapping
-            residues = self._parse_rfam_residues(mapping, pdb_id)
-            
-            instances.append(MotifInstance(
-                instance_id=instance_id,
-                motif_id=motif_info['short'],
-                pdb_id=pdb_id,
-                residues=residues,
-                annotation=motif_info['name'],
-                metadata={
-                    'source': 'rfam_api',
-                    'rfam_id': rfam_motif_id,
-                    'raw_mapping': mapping
-                }
-            ))
-        
-        return instances
+        pdb_instances = self._get_parsed_instances_for_motif(rfam_motif_id, motif_info)
+        return pdb_instances.get(pdb_id, [])
     
-    def _get_pdb_mappings_for_motif(self, rfam_motif_id: str) -> Dict[str, List]:
+    def _get_parsed_instances_for_motif(
+        self, rfam_motif_id: str, motif_info: Dict
+    ) -> Dict[str, List[MotifInstance]]:
         """
-        Get PDB structure mappings for a Rfam motif.
+        Download and parse the SEED alignment for a single Rfam motif.
         
-        Uses Rfam /motif/{id} or /family endpoint.
-        
-        Args:
-            rfam_motif_id: Rfam motif ID
-            
-        Returns:
-            Dict mapping PDB IDs to lists of mapping data
+        Returns a dict mapping PDB IDs to their MotifInstance lists.
+        Results are cached per motif ID.
         """
-        # Check in-memory cache
-        if rfam_motif_id in self._motif_pdb_cache:
-            return self._motif_pdb_cache[rfam_motif_id]
+        if rfam_motif_id in self._motif_instances_cache:
+            return self._motif_instances_cache[rfam_motif_id]
         
-        url = f"{self.API_BASE_URL}/motif/{rfam_motif_id}?content-type=application/json"
+        url = (
+            f"{self.API_BASE_URL}/motif/{rfam_motif_id}/alignment"
+            f"?acc={rfam_motif_id}&alnType=seed&nseLabels=0&format=stockholm"
+        )
         
         try:
             request = urllib.request.Request(
                 url,
                 headers={
                     'User-Agent': 'RSMViewer/2.0',
-                    'Accept': 'application/json',
+                    'Accept': 'text/plain',
                 }
             )
             
-            # Create SSL context that doesn't verify certificates
-            # This handles macOS certificate issues
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
             
             with urllib.request.urlopen(request, timeout=self.REQUEST_TIMEOUT, context=ssl_context) as response:
                 if response.status == 200:
-                    data = json.loads(response.read().decode('utf-8'))
+                    body = response.read().decode('utf-8', errors='replace')
+                    if not body or not body.startswith('# STOCKHOLM'):
+                        self._motif_instances_cache[rfam_motif_id] = {}
+                        return {}
                     
-                    # Parse the response to extract PDB mappings
-                    pdb_mappings = self._parse_rfam_motif_response(data)
+                    motif_types = self._converter.convert_data(body, {
+                        'type_id': motif_info['short'],
+                        'name': motif_info['name'],
+                        'file': url,
+                        'source': 'Rfam API',
+                    })
                     
-                    # Cache the result
-                    self._motif_pdb_cache[rfam_motif_id] = pdb_mappings
-                    return pdb_mappings
+                    # Group instances by PDB ID
+                    pdb_instances: Dict[str, List[MotifInstance]] = {}
+                    for mt in motif_types:
+                        for inst in mt.instances:
+                            pdb_instances.setdefault(inst.pdb_id, []).append(inst)
                     
-        except urllib.error.HTTPError as e:
-            # 404 is expected for motifs not in Rfam - silently return empty
+                    self._motif_instances_cache[rfam_motif_id] = pdb_instances
+                    return pdb_instances
+                    
+        except (urllib.error.HTTPError, urllib.error.URLError):
             pass
-        except urllib.error.URLError as e:
-            # Network errors - silently return empty
-            pass
-        except Exception as e:
-            # Other errors - silently return empty
+        except Exception:
             pass
         
+        self._motif_instances_cache[rfam_motif_id] = {}
         return {}
-    
-    def _parse_rfam_motif_response(self, data: Dict) -> Dict[str, List]:
-        """
-        Parse Rfam API motif response to extract PDB mappings.
-        
-        The Rfam API returns structure mappings in various formats.
-        We extract PDB IDs and residue ranges.
-        
-        Args:
-            data: JSON response from Rfam API
-            
-        Returns:
-            Dict mapping PDB IDs to lists of residue mapping data
-        """
-        pdb_mappings: Dict[str, List] = {}
-        
-        # Try different response formats
-        # Rfam may return 'pdb' or 'structures' field
-        structures = data.get('structures', data.get('pdb', []))
-        
-        if isinstance(structures, list):
-            for struct in structures:
-                if isinstance(struct, dict):
-                    pdb_id = struct.get('pdb_id', struct.get('pdb', '')).upper()
-                    if pdb_id and len(pdb_id) == 4:
-                        if pdb_id not in pdb_mappings:
-                            pdb_mappings[pdb_id] = []
-                        pdb_mappings[pdb_id].append(struct)
-        
-        return pdb_mappings
-    
-    def _parse_rfam_residues(self, mapping: Dict, pdb_id: str) -> List[ResidueSpec]:
-        """
-        Parse residue information from Rfam mapping data.
-        
-        Rfam provides chain and residue range information.
-        
-        Args:
-            mapping: Mapping dict from Rfam
-            pdb_id: PDB ID for context
-            
-        Returns:
-            List of ResidueSpec objects
-        """
-        residues = []
-        
-        chain = mapping.get('chain', mapping.get('auth_asym_id', 'A'))
-        seq_start = mapping.get('seq_start', mapping.get('pdb_start', 1))
-        seq_end = mapping.get('seq_end', mapping.get('pdb_end', seq_start))
-        
-        try:
-            start = int(seq_start)
-            end = int(seq_end)
-            
-            for res_num in range(start, end + 1):
-                residues.append(ResidueSpec(
-                    chain=str(chain),
-                    residue_number=res_num,
-                    nucleotide='',  # Rfam doesn't always provide nucleotide type
-                ))
-        except (ValueError, TypeError):
-            pass
-        
-        return residues
-    
+
     def has_pdb(self, pdb_id: str) -> bool:
         """
         Check if a PDB has any Rfam motif annotations.

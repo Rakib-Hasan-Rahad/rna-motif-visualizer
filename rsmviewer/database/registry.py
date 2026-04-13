@@ -264,15 +264,13 @@ def initialize_registry(motif_database_path: str, enable_api: bool = True) -> Da
     atlas_path = db_path / 'RNA 3D motif atlas'
     if atlas_path.exists():
         atlas_provider = RNA3DAtlasProvider(str(atlas_path))
-        if registry.register_provider(atlas_provider, 'atlas'):
-            print(f"Registered RNA 3D Atlas database (local)")
+        registry.register_provider(atlas_provider, 'atlas')
     
     # Try to register Rfam provider (local)
     rfam_path = db_path / 'Rfam motif database'
     if rfam_path.exists():
         rfam_provider = RfamProvider(str(rfam_path))
-        if registry.register_provider(rfam_provider, 'rfam'):
-            print(f"Registered Rfam motif database (local)")
+        registry.register_provider(rfam_provider, 'rfam')
     
     # ========================================
     # API PROVIDERS (online, comprehensive)
@@ -285,13 +283,11 @@ def initialize_registry(motif_database_path: str, enable_api: bool = True) -> Da
             
             # Register BGSU RNA 3D Hub API provider
             bgsu_api = BGSUAPIProvider(cache_manager=cache_manager)
-            if registry.register_provider(bgsu_api, 'bgsu_api'):
-                print(f"Registered BGSU RNA 3D Hub API (~3000+ PDBs)")
+            registry.register_provider(bgsu_api, 'bgsu_api')
             
             # Register Rfam API provider
             rfam_api = RfamAPIProvider(cache_manager=cache_manager)
-            if registry.register_provider(rfam_api, 'rfam_api'):
-                print(f"Registered Rfam API (named motifs)")
+            registry.register_provider(rfam_api, 'rfam_api')
                 
         except Exception as e:
             print(f"Note: API providers not available ({e})")

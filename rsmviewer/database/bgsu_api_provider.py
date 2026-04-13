@@ -300,6 +300,17 @@ class BGSUAPIProvider(BaseProvider):
             if annotations:
                 motifs = self._parse_csv_with_annotations(csv_data, annotations, pdb_id)
             else:
+                import logging as _logging
+                _lg = _logging.getLogger(__name__)
+                _lg.warning(
+                    f"Could not retrieve semantic motif annotations from "
+                    f"BGSU RNA 3D Hub HTML page for {pdb_id}. "
+                    f"Using CSV loop data with generic names instead."
+                )
+                print(
+                    f"\u26a0 Could not retrieve semantic annotations from "
+                    f"BGSU RNA 3D Hub for {pdb_id}. Using CSV loop data instead."
+                )
                 motifs = self._parse_csv_response(csv_data, pdb_id)
             
             # Cache the results

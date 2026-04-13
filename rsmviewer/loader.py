@@ -285,8 +285,6 @@ class UnifiedMotifLoader:
         if all_selections:
             combined_sel = " or ".join(all_selections)
             main_motif_sel = f"(model {structure_name}) and ({combined_sel})"
-            # Hide the cartoon on main structure for these residues
-            self.cmd.hide('cartoon', main_motif_sel)
         
         # Create PyMOL object (visible in right panel)
         obj_name = self.selector.create_motif_class_object(
@@ -708,6 +706,17 @@ class VisualizationManager:
             print(f"    rmv_show ALL             Show all motif types with objects")
         print("=" * 50 + "\n")
     
+    def _deactivate_other_objects(self, keep_active):
+        """Disable all PyMOL objects except those in keep_active.
+
+        Args:
+            keep_active (list): List of object names that should remain enabled.
+        """
+        keep = set(keep_active)
+        for obj in self.cmd.get_object_list():
+            if obj not in keep:
+                self.cmd.disable(obj)
+
     def show_motif_type(self, motif_type: str,
                         filter_pdb: str = '', filter_suffix: str = '',
                         padding: int = 0) -> bool:
@@ -788,6 +797,7 @@ class VisualizationManager:
                 f"{motif_type}_ALL_{pdb_id}{source_suffix}_P")
             from .utils.parser import SelectionParser as _SP
             pad_sels = []
+            pad_entries = []
             for _det in motif_details:
                 _res = _det.get('residues', [])
                 if not _res:
@@ -801,7 +811,9 @@ class VisualizationManager:
                     for _v in _rl:
                         for _off in range(-padding, padding + 1):
                             expanded.add(_v + _off)
-                    _s = _SP.create_selection_string(_ch, sorted(expanded))
+                    expanded_list = sorted(expanded)
+                    pad_entries.append((_ch, expanded_list))
+                    _s = _SP.create_selection_string(_ch, expanded_list)
                     if _s:
                         pad_sels.append(f"({_s})")
             if pad_sels:
@@ -809,81 +821,34 @@ class VisualizationManager:
                     existing = self.cmd.get_object_list()
                     if pad_obj in existing:
                         self.cmd.delete(pad_obj)
-                    pad_full = f"(model {structure_name}) and (" + " or ".join(pad_sels) + ")"
-                    self.cmd.create(pad_obj, pad_full)
-                    self.cmd.set('cartoon_nucleic_acid_mode', 4, pad_obj, quiet=1)
-                    self.cmd.set('cartoon_tube_radius', 0.4, pad_obj, quiet=1)
-                    colors.set_motif_color_in_pymol(self.cmd, pad_obj, motif_type)
+                    created = self.motif_loader.selector.create_object_from_entries(
+                        pad_obj,
+                        structure_name,
+                        pad_entries,
+                    )
+                    if created:
+                        self.cmd.set('cartoon_nucleic_acid_mode', 4, pad_obj, quiet=1)
+                        self.cmd.set('cartoon_tube_radius', 0.4, pad_obj, quiet=1)
+                        colors.set_motif_color_in_pymol(self.cmd, pad_obj, motif_type)
                 except Exception as e:
                     self.logger.debug(f"Could not create padded object: {e}")
         
-        # Hide ALL separate motif objects (prevents overlap/stripes)
-        for mt, mt_info in loaded_motifs.items():
-            obj_name_check = mt_info.get('object_name')
-            if obj_name_check:
-                self.cmd.disable(obj_name_check)
+        # Determine which object(s) to keep active
+        active_obj = obj_name
+        if padding > 0:
+            pad_obj_name = (obj_name + "_P") if obj_name else None
+            if pad_obj_name and pad_obj_name in self.cmd.get_object_list():
+                active_obj = pad_obj_name
+
+        # Deactivate all other objects — only the active motif object remains
+        self._deactivate_other_objects([active_obj] if active_obj else [])
         
-        # Hide any previously created instance objects
-        for obj in self.cmd.get_object_list():
-            for mt in loaded_motifs.keys():
-                mt_sanitized = sanitize_pymol_name(mt)
-                suffix = loaded_motifs[mt].get('source_suffix', '')
-                mt_pdb_id = loaded_motifs[mt].get('pdb_id', '')
-                pdb_tag = f"_{mt_pdb_id}" if mt_pdb_id else ""
-                prefix = sanitize_pymol_name(f"{mt_sanitized}{pdb_tag}{suffix}")
-                if obj.startswith(f"{prefix}_") and obj[len(prefix)+1:].isdigit():
-                    self.cmd.disable(obj)
-        
-        # Show the full structure with uniform representation
-        self.cmd.enable(structure_name)
-        self.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
-        self.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
-        self.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
-        
-        # Step 3: Color the ENTIRE structure gray80 first
-        self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
-        
-        # Color the selected motif residues in their color
-        if motif_details:
-            # Show the motif residues (in case they were hidden)
-            if main_selection:
-                self.cmd.show('cartoon', main_selection)
-            
-            # Color each instance individually to avoid PyMOL selection string length limits
-            # (Large "or" selections with 100+ instances can exceed PyMOL's parsing limits)
-            from .utils.parser import SelectionParser
-            for detail in motif_details:
-                residues = detail.get('residues', [])
-                if not residues:
-                    continue
-                
-                # Build selection for this individual instance
-                chain_residues = {}
-                for res in residues:
-                    if isinstance(res, tuple) and len(res) >= 3:
-                        nucleotide, resi, chain = res[0], res[1], res[2]
-                        if chain not in chain_residues:
-                            chain_residues[chain] = []
-                        chain_residues[chain].append(resi)
-                
-                # Create selection for this instance and color it
-                selections = []
-                for chain, resi_list in chain_residues.items():
-                    if padding > 0:
-                        expanded = set()
-                        for r in resi_list:
-                            for offset in range(-padding, padding + 1):
-                                expanded.add(r + offset)
-                        resi_list = sorted(expanded)
-                    sel = SelectionParser.create_selection_string(chain, sorted(resi_list))
-                    if sel:
-                        selections.append(f"({sel})")
-                
-                if selections:
-                    combined_sel = " or ".join(selections)
-                    instance_sel = f"(model {structure_name}) and ({combined_sel})"
-                    # Color this instance with the motif color
-                    colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)
+        # Enable the motif-type object
+        if active_obj:
+            self.cmd.show('cartoon', active_obj)
+            self.cmd.set('cartoon_nucleic_acid_mode', 4, active_obj, quiet=1)
+            self.cmd.set('cartoon_tube_radius', 0.4, active_obj, quiet=1)
+            self.cmd.enable(active_obj)
         
         # Print instance table
         self._print_motif_instance_table(motif_type, motif_details)
@@ -931,27 +896,27 @@ class VisualizationManager:
                     chain_residues[chain] = []
                 chain_residues[chain].append(resi)
         
-        # Create selection
-        selections = []
+        chain_entries = []
         for chain, resi_list in chain_residues.items():
-            sel = SelectionParser.create_selection_string(chain, sorted(resi_list))
-            if sel:
-                selections.append(f"({sel})")
-        
-        if not selections:
+            chain_entries.append((chain, sorted(resi_list)))
+
+        if not chain_entries:
             return False
-        
-        combined_sel = " or ".join(selections)
-        instance_sel = f"(model {structure_name}) and ({combined_sel})"
         
         # Create object name: MOTIF_NO_PDB_S3 (e.g., GNRA_1_1S72_S3, GNRA_2_4V9F_S7)
         pdb_id = self.structure_loader.get_current_pdb_id() or ''
         pdb_tag = f"_{pdb_id}" if pdb_id else ""
         obj_name = sanitize_pymol_name(f"{motif_type}_{instance_no}{pdb_tag}{source_suffix}")
         
-        # Create the object
         try:
-            self.cmd.create(obj_name, instance_sel)
+            created = self.motif_loader.selector.create_object_from_entries(
+                obj_name,
+                structure_name,
+                chain_entries,
+            )
+            if not created:
+                return False
+
             self.cmd.show('cartoon', obj_name)
             self.cmd.set('cartoon_nucleic_acid_mode', 4, obj_name)
             self.cmd.set('cartoon_tube_radius', 0.4, obj_name)
@@ -990,7 +955,7 @@ class VisualizationManager:
                 if chains_dict[chain]:
                     min_resi = min(chains_dict[chain])
                     max_resi = max(chains_dict[chain])
-                    range_parts.append(f"{chain}:{min_resi}-{max_resi}")
+                    range_parts.append(f"{min_resi}-{max_resi}")
             
             return ', '.join(range_parts) if range_parts else None
         
@@ -1048,7 +1013,7 @@ class VisualizationManager:
                 if resi_values:
                     min_resi = min(resi_values)
                     max_resi = max(resi_values)
-                    range_parts.append(f"{chain}:{min_resi}-{max_resi}")
+                    range_parts.append(f"{min_resi}-{max_resi}")
         
         return ', '.join(range_parts) if range_parts else None
     
@@ -1162,7 +1127,10 @@ class VisualizationManager:
         src = metadata.get('_source_label', '')
         also = metadata.get('_also_found_in', [])
         if also:
-            return ' + '.join([src] + also)
+            # Deduplicate: exclude labels matching the primary source
+            unique_also = [lbl for lbl in also if lbl != src]
+            if unique_also:
+                return ' + '.join([src] + unique_also)
         return src
 
     def _print_motif_instance_table(self, motif_type: str, motif_details: List[Dict]) -> None:
@@ -1230,22 +1198,11 @@ class VisualizationManager:
                     for r in regions:
                         if isinstance(r, tuple) and len(r) >= 3:
                             chain, start, end = r[0], r[1], r[2]
-                            range_parts.append(f"{chain}:{start}-{end}")
+                            range_parts.append(f"{start}-{end}")
                     if range_parts:
                         residue_range = ', '.join(range_parts)
             
-            # Second try: Check for RMSX 'aligned_regions' metadata
-            elif metadata and 'aligned_regions' in metadata and metadata['aligned_regions']:
-                aligned_regions = metadata['aligned_regions']
-                if isinstance(aligned_regions, list) and len(aligned_regions) > 0:
-                    range_parts = []
-                    for r in aligned_regions:
-                        if isinstance(r, tuple) and len(r) >= 2:
-                            range_parts.append(f"{r[0]}-{r[1]}")
-                    if range_parts:
-                        residue_range = ', '.join(range_parts)
-            
-            # Third try: Use official chainbreak metadata (BGSU format)
+            # Second try: Use official chainbreak metadata (BGSU format)
             elif metadata and 'chainbreak' in metadata:
                 chainbreak = metadata['chainbreak']
                 residue_range = self._get_ranges_from_chainbreak(residues, chainbreak, metadata)
@@ -1257,7 +1214,7 @@ class VisualizationManager:
                 
                 for chain in sorted(strand_ranges.keys()):
                     for start, end in strand_ranges[chain]:
-                        range_parts.append(f"{chain}:{start}-{end}")
+                        range_parts.append(f"{start}-{end}")
                 
                 residue_range = ', '.join(range_parts) if range_parts else '-'
             
@@ -1327,30 +1284,6 @@ class VisualizationManager:
             self.logger.error("No structure name found")
             return False
         
-        # Hide ALL separate motif objects
-        for mt, mt_info in loaded_motifs.items():
-            obj_name = mt_info.get('object_name')
-            if obj_name:
-                self.cmd.disable(obj_name)
-        
-        # Hide any previously created instance objects
-        for obj in self.cmd.get_object_list():
-            for mt in loaded_motifs.keys():
-                mt_sanitized = sanitize_pymol_name(mt)
-                sfx = loaded_motifs[mt].get('source_suffix', '')
-                mt_pdb_id = loaded_motifs[mt].get('pdb_id', '')
-                pdb_tag = f"_{mt_pdb_id}" if mt_pdb_id else ""
-                prefix = sanitize_pymol_name(f"{mt_sanitized}{pdb_tag}{sfx}")
-                if obj.startswith(f"{prefix}_") and obj[len(prefix)+1:].isdigit():
-                    self.cmd.disable(obj)
-        
-        # Show the full structure with uniform representation in gray80
-        self.cmd.enable(structure_name)
-        self.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
-        self.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
-        self.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
-        self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
-        
         # Color the instance residues WITHIN the main structure
         detail = motif_details[instance_no - 1]
         residues = detail.get('residues', [])
@@ -1390,9 +1323,6 @@ class VisualizationManager:
                 combined_sel = " or ".join(selections)
                 instance_sel = f"(model {structure_name}) and ({combined_sel})"
                 
-                # Color the instance residues WITHIN the main structure (no overlap)
-                colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)
-                
                 # Clean up conflicting objects to avoid visual overlap
                 existing_objects = self.cmd.get_object_list()
                 # Delete the OTHER variant (base vs padded) so both aren't visible
@@ -1404,13 +1334,35 @@ class VisualizationManager:
                 if instance_obj in existing_objects:
                     self.cmd.delete(instance_obj)
                 try:
-                    self.cmd.create(instance_obj, instance_sel)
+                    visible_entries = []
+                    for chain, resi_list in chain_residues.items():
+                        if padding > 0:
+                            expanded = set()
+                            for residue in resi_list:
+                                for offset in range(-padding, padding + 1):
+                                    expanded.add(residue + offset)
+                            visible_entries.append((chain, sorted(expanded)))
+                        else:
+                            visible_entries.append((chain, sorted(resi_list)))
+
+                    created = self.motif_loader.selector.create_object_from_entries(
+                        instance_obj,
+                        structure_name,
+                        visible_entries,
+                    )
+                    if not created:
+                        raise ValueError("instance object creation returned no atoms")
+
+                    self.cmd.show('cartoon', instance_obj)
                     self.cmd.set('cartoon_nucleic_acid_mode', 4, instance_obj, quiet=1)
                     self.cmd.set('cartoon_tube_radius', 0.4, instance_obj, quiet=1)
                     colors.set_motif_color_in_pymol(self.cmd, instance_obj, motif_type)
-                    self.cmd.enable(instance_obj)
                 except Exception as e:
                     self.logger.debug(f"Could not create instance object: {e}")
+                
+                # Deactivate all other objects — only this instance object remains
+                self._deactivate_other_objects([instance_obj])
+                self.cmd.enable(instance_obj)
                 
                 # Zoom to the instance (using the selection, not the object)
                 self.cmd.zoom(instance_sel, 5)
@@ -1533,33 +1485,25 @@ class VisualizationManager:
                     loaded_motifs[motif_type] = info
                     self.logger.debug(f"Created PyMOL object: {obj_name}")
         
-        # Step 2: Hide individual instance objects (avoid clutter)
-        for obj in self.cmd.get_object_list():
-            for mt, mt_info in loaded_motifs.items():
-                mt_sanitized = sanitize_pymol_name(mt)
-                suffix = mt_info.get('source_suffix', '')
-                mt_pdb_id = mt_info.get('pdb_id', '')
-                pdb_tag = f"_{mt_pdb_id}" if mt_pdb_id else ""
-                prefix = sanitize_pymol_name(f"{mt_sanitized}{pdb_tag}{suffix}")
-                if obj.startswith(f"{prefix}_") and obj[len(prefix)+1:].isdigit():
-                    self.cmd.disable(obj)
+        # Step 2: Collect motif-type object names to keep active
+        active_objects = []
+        for motif_type, info in loaded_motifs.items():
+            obj_name = info.get('object_name')
+            if obj_name:
+                active_objects.append(obj_name)
+
+        # Deactivate all objects except motif-type objects
+        self._deactivate_other_objects(active_objects)
         
-        # Step 3: Show the full structure with uniform representation
-        self.cmd.enable(structure_name)
-        self.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
-        self.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
-        self.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
-        
-        # Color the ENTIRE structure gray80 first
-        self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
-        
-        # Step 4: Enable all motif-type objects and color residues on the structure
+        # Step 3: Enable all motif-type objects
         total_instances = 0
         from .utils.parser import SelectionParser
         for motif_type, info in loaded_motifs.items():
-            # Enable the motif-type PyMOL object
             obj_name = info.get('object_name')
             if obj_name:
+                self.cmd.show('cartoon', obj_name)
+                self.cmd.set('cartoon_nucleic_acid_mode', 4, obj_name, quiet=1)
+                self.cmd.set('cartoon_tube_radius', 0.4, obj_name, quiet=1)
                 self.cmd.enable(obj_name)
             
             motif_details = info.get('motif_details', [])
@@ -1573,35 +1517,6 @@ class VisualizationManager:
             if not motif_details:
                 continue
             total_instances += len(motif_details)
-            
-            # Color each instance's residues on the main structure
-            for detail in motif_details:
-                residues = detail.get('residues', [])
-                if not residues:
-                    continue
-                
-                chain_residues = {}
-                for res in residues:
-                    if isinstance(res, tuple) and len(res) >= 3:
-                        nucleotide, resi, chain = res[0], res[1], res[2]
-                        if chain not in chain_residues:
-                            chain_residues[chain] = []
-                        chain_residues[chain].append(resi)
-                
-                selections = []
-                for chain, resi_list in chain_residues.items():
-                    sel = SelectionParser.create_selection_string(chain, sorted(resi_list))
-                    if sel:
-                        selections.append(f"({sel})")
-                
-                if selections:
-                    combined_sel = " or ".join(selections)
-                    instance_sel = f"(model {structure_name}) and ({combined_sel})"
-                    try:
-                        self.cmd.show('cartoon', instance_sel)
-                        colors.set_motif_color_in_pymol(self.cmd, instance_sel, motif_type)
-                    except Exception as e:
-                        self.logger.debug(f"Could not color instance {motif_type}: {e}")
         
         self.logger.success(f"Showing all {len(loaded_motifs)} motif types ({total_instances} total instances)")
         
@@ -1928,6 +1843,65 @@ class VisualizationManager:
     # rmv_view helpers — zoom / select on the BASE structure (no objects)
     # ------------------------------------------------------------------
 
+    def reset_view_coloring(self, motif_type: str = '',
+                            filter_pdb: str = '', filter_suffix: str = '') -> bool:
+        """Reset view coloring on the base structure.
+
+        If *motif_type* is given, only that type's residues revert to gray80.
+        If empty, the entire nucleic-acid polymer is reset to gray80.
+        """
+        loaded_motifs = self.motif_loader.get_loaded_motifs()
+        structure_name = None
+        for info in loaded_motifs.values():
+            if info.get('structure_name'):
+                structure_name = info['structure_name']
+                break
+        if not structure_name:
+            if self.structure_loader:
+                structure_name = self.structure_loader.get_current_structure()
+        if not structure_name:
+            self.logger.error("No structure loaded")
+            return False
+
+        if not motif_type:
+            # Reset everything
+            self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
+            self.logger.success("View coloring reset to gray")
+            return True
+
+        # Reset only the specified motif type
+        motif_type = motif_type.upper().strip()
+        if motif_type not in loaded_motifs:
+            self.logger.error(f"Motif type '{motif_type}' not loaded")
+            return False
+
+        info = loaded_motifs[motif_type]
+        motif_details = info.get('motif_details', [])
+        if filter_pdb:
+            motif_details = [
+                d for d in motif_details
+                if d.get('_pdb_id', info.get('pdb_id', '')) == filter_pdb
+                and d.get('_source_suffix', info.get('source_suffix', '')) == filter_suffix
+            ]
+
+        from .utils.parser import SelectionParser
+        for detail in motif_details:
+            residues = detail.get('residues', [])
+            if not residues:
+                continue
+            chain_residues = {}
+            for res in residues:
+                if isinstance(res, tuple) and len(res) >= 3:
+                    chain_residues.setdefault(res[2], []).append(res[1])
+            for chain, resi_list in chain_residues.items():
+                sel = SelectionParser.create_selection_string(chain, sorted(resi_list))
+                if sel:
+                    instance_sel = f"(model {structure_name}) and ({sel})"
+                    self.cmd.color('gray80', instance_sel)
+
+        self.logger.success(f"{motif_type} view coloring reset to gray")
+        return True
+
     def view_motif_type(self, motif_type: str,
                         filter_pdb: str = '', filter_suffix: str = '') -> bool:
         """Zoom to all instances of a motif type on the base structure.
@@ -1998,6 +1972,7 @@ class VisualizationManager:
 
         print("  Next steps:")
         print(f"    rmv_view {motif_type} <NO>         Zoom to specific instance")
+        print(f"    rmv_view {motif_type} hide         Remove {motif_type} coloring")
         print(f"    rmv_show {motif_type}              Create objects & render")
         print()
         return True
@@ -2085,6 +2060,7 @@ class VisualizationManager:
             print(f"    rmv_view {motif_type} {instance_no-1}             Previous instance")
         if instance_no < len(motif_details):
             print(f"    rmv_view {motif_type} {instance_no+1}             Next instance")
+        print(f"    rmv_view {motif_type} hide         Remove {motif_type} coloring")
         print(f"    rmv_show {motif_type} {instance_no}              Create object & render")
         print()
         return True

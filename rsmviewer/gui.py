@@ -140,6 +140,10 @@ class MotifVisualizerGUI:
         # Jaccard similarity threshold for cascade merge (0.0–1.0)
         self.jaccard_threshold = 0.60
         
+        # Store within-source dedup stats for display in source attribution report
+        # Dict: {source_id: (before_count, after_count)}
+        self.dedup_stats = {}
+        
         # Track loaded PDB+source combinations for cross-PDB superimposition
         # Each entry is a tuple (pdb_id_upper, source_suffix) e.g. ("1S72", "_S7")
         self.loaded_sources = set()
@@ -632,7 +636,7 @@ class MotifVisualizerGUI:
                 self.logger.info("Next steps:")
                 self.logger.info(f"  rmv_summary              Show all motifs")
                 self.logger.info(f"  rmv_summary HL           Show HL instances")
-                self.logger.info(f"  rmv_view motif           Highlight all motifs on structure")
+                self.logger.info(f"  rmv_view all             Highlight all motifs on structure")
                 self.logger.info(f"  rmv_show HL              Render hairpin loops")
                 self.logger.info(f"  rmv_show HL 1            Zoom to specific instance")
                 self.logger.info("")
@@ -744,8 +748,22 @@ class MotifVisualizerGUI:
             # --- Step 2: Enrich generic sources via homolog ---
             generic_in_selection = [sid for sid in source_ids if sid in GENERIC_SOURCES and raw_sources.get(sid)]
             
-            if generic_in_selection:
-                self.logger.info(f"Step 2/3: Enriching {len(generic_in_selection)} generic source(s) via homolog lookup...")
+            # Pre-filter: skip sources that already have specific (non-generic)
+            # names for ALL their categories (e.g., source 3 after successful
+            # HTML scraping).  Only enrich sources that still carry generic names.
+            from .database.homolog_enricher import _is_generic_name
+            sources_needing_enrichment = [
+                sid for sid in generic_in_selection
+                if any(_is_generic_name(cat) for cat in raw_sources[sid])
+            ]
+            skipped = set(generic_in_selection) - set(sources_needing_enrichment)
+            if skipped:
+                self.logger.info(
+                    f"  Skipping enrichment for source(s) {skipped} "
+                    f"(already have specific names)")
+
+            if sources_needing_enrichment:
+                self.logger.info(f"Step 2/3: Enriching {len(sources_needing_enrichment)} generic source(s) via homolog lookup...")
                 try:
                     rep_loader = get_representative_loader()
                     
@@ -764,7 +782,7 @@ class MotifVisualizerGUI:
                     
                     enricher = HomologEnricher(rep_loader, bgsu_provider)
                     
-                    for sid in generic_in_selection:
+                    for sid in sources_needing_enrichment:
                         if raw_sources[sid]:
                             before_cats = len(raw_sources[sid])
                             raw_sources[sid] = enricher.enrich(pdb_id, raw_sources[sid])
@@ -794,6 +812,7 @@ class MotifVisualizerGUI:
             # identical residue sets. Remove exact duplicates within each
             # source before cascade merge (which only deduplicates ACROSS
             # sources).
+            self.dedup_stats = {}
             for sid in source_ids:
                 src_data = raw_sources.get(sid, {})
                 if not src_data:
@@ -813,6 +832,7 @@ class MotifVisualizerGUI:
                             unique.append(inst)
                     deduped[mtype] = unique
                 total_after = sum(len(v) for v in deduped.values())
+                self.dedup_stats[sid] = (total_before, total_after)
                 if total_before != total_after:
                     self.logger.info(
                         f"  [{sid}] Within-source dedup: {total_before} → {total_after} "
@@ -1133,7 +1153,7 @@ class MotifVisualizerGUI:
                 self.logger.info("Next steps:")
                 self.logger.info(f"  rmv_summary              Show all motifs")
                 self.logger.info(f"  rmv_summary <TYPE>       Show specific motif type")
-                self.logger.info(f"  rmv_view motif           Highlight all motifs on structure")
+                self.logger.info(f"  rmv_view all             Highlight all motifs on structure")
                 self.logger.info(f"  rmv_show <TYPE>          Render motif on structure")
                 self.logger.info(f"  rmv_show <TYPE> <NO>     Zoom to specific instance")
                 self.logger.info("")
@@ -1649,6 +1669,7 @@ class MotifVisualizerGUI:
         print("│  📥 LOADING & DATA                                                      │")
         print("├" + "─"*78 + "┤")
         print("│  rmv_fetch <PDB_ID>        Load PDB structure (no motif data)            │")
+        print("│  rmv_fetch /path/to/file   Load local PDB or mmCIF file                  │")
         print("│  rmv_fetch <ID> cif_use_auth=0  Load with label_asym_id chains          │")
         print("│  rmv_load_motif            Fetch motif data from selected source         │")
         print("│  rmv_load <PDB_ID>         Legacy: show workflow guide                  │")
@@ -1661,9 +1682,11 @@ class MotifVisualizerGUI:
         print("│  rmv_show <TYPE> <NO>      Zoom to specific instance with details       │")
         print("│  rmv_show <TYPE> 1,3,5     Show multiple specific instances             │")
         print("│  rmv_show <TYPE>, padding=N  Expand residue ranges ±N for visualization │")
-        print("│  rmv_view motif            Highlight all motif regions on structure     │")
+        print("│  rmv_view all              Highlight all motif regions on structure     │")
         print("│  rmv_view <TYPE>           Zoom to motif regions (no objects created)   │")
         print("│  rmv_view <TYPE> <NO>      Zoom to instance & create selection          │")
+        print("│  rmv_view hide             Reset all view coloring to gray              │")
+        print("│  rmv_view <TYPE> hide      Reset coloring for a specific motif type     │")
         print("│  rmv_toggle <TYPE> on/off  Toggle motif visibility                      │")
         print("│  rmv_bg_color <COLOR>      Change background (non-motif) color          │")
         print("│  rmv_color <TYPE> <COLOR>  Change motif color                           │")
@@ -1701,30 +1724,18 @@ class MotifVisualizerGUI:
         print("│  📁 USER ANNOTATIONS (Sources 5-8)                                      │")
         print("├" + "─"*78 + "┤")
         print("│  rmv_user <TOOL> <PDB_ID>  Load FR3D/RMS/RMSX/NoBIAS annotations       │")
-        print("│  rmv_db 5 /path/to/data    FR3D with custom data directory              │")
-        print("│  rmv_db 6 off              Disable RMS P-value filtering                │")
-        print("│  rmv_db 6 on               Enable RMS P-value filtering                 │")
-        print("│  rmv_db 6 MOTIF 0.01       Set custom P-value threshold for motif       │")
-        print("│  rmv_db 7 off              Disable RMSX P-value filtering               │")
-        print("│  rmv_db 7 on               Enable RMSX P-value filtering                │")
-        print("│  rmv_db 7 /path/to/data    RMSX with custom data directory              │")
-        print("│  rmv_db 8 off              Disable NoBIAS P-value filtering             │")
-        print("│  rmv_db 8 on               Enable NoBIAS P-value filtering              │")
-        print("│  rmv_db 8 MOTIF 0.01       Set custom NoBIAS P-value threshold          │")
-        print("│  rmv_db 8 /path/to/data    NoBIAS with custom data directory            │")
+        print("│  rmv_db <N> /path/to/data  Use custom data directory (any source 1-8)   │")
+        print("│  rmv_db 7 off              Disable P-value filtering                    │")
+        print("│  rmv_db 7 on               Enable P-value filtering                     │")
+        print("│  rmv_db 7 MOTIF 0.01       Set custom P-value threshold for motif       │")
         print("├" + "─"*78 + "┤")
         print("│  🔬 STRUCTURAL SUPERIMPOSITION                                          │")
         print("├" + "─"*78 + "┤")
         print("│  rmv_super <TYPE>              Medoid superimposition (all instances)     │")
-        print("│  rmv_super <TYPE>, PDB_SRC     Cross-PDB / multi-source superimposition  │")
+        print("│  rmv_super <TYPE>, PDB1_SN, PDB2_SN  Cross-PDB superimposition          │")
         print("│  rmv_super <TYPE> 1,3,5        Superimpose specific instances only        │")
         print("│  rmv_super <TYPE>, padding=N   Expand residue ranges ±N for objects      │")
         print("│  rmv_align <TYPE>              Same as rmv_super but sequence-dependent   │")
-        print("├" + "─"*78 + "┤")
-        print("│  🧬 BASE-PAIR VISUALIZATION                                             │")
-        print("├" + "─"*78 + "┤")
-        print("│  rmv_pair <pdb_ch1_res1_ch2_res2>  Visualize a single base pair         │")
-        print("│  rmv_pair_batch <file>              Batch visualize from file             │")
         print("└" + "─"*78 + "┘")
         
         print("\n  QUICK EXAMPLES:")
@@ -1735,15 +1746,17 @@ class MotifVisualizerGUI:
         print("     rmv_db 3                  # Select BGSU API")
         print("     rmv_load_motif            # Fetch motif data")
         print("     rmv_summary               # Show motif types & counts")
-        print("     rmv_view motif            # Highlight all motifs on structure")
+        print("     rmv_view all              # Highlight all motifs on structure")
         print("     rmv_summary HL            # Show hairpin loop instances")
         print("     rmv_show HL               # Render all hairpin loops")
         print("     rmv_show HL 1             # Zoom to specific instance")
         print()
         print("  2. Quick preview (no objects):")
-        print("     rmv_view motif            # Highlight all motifs (colored regions)")
+        print("     rmv_view all              # Highlight all motifs (colored regions)")
         print("     rmv_view K-TURN           # Zoom to all K-TURN instances")
         print("     rmv_view K-TURN 1         # Zoom to instance + create selection")
+        print("     rmv_view K-TURN hide      # Remove K-TURN coloring from structure")
+        print("     rmv_view hide             # Reset all view coloring to gray")
         print()
         print("  3. Switch sources (no re-download):")
         print("     rmv_db 7                  # Switch to RMSX")
@@ -1773,10 +1786,6 @@ class MotifVisualizerGUI:
         print("     rmv_save ALL cif           Export all structures (mmCIF)")
         print("     rmv_save HL 3 cif          Export HL instance #3")
         print("     rmv_save current           Save current view (high-res)")
-        print()
-        print("  8. Base-pair visualization:")
-        print("     rmv_pair 1S72_A_100_A_200  Visualize a single base pair")
-        print("     rmv_pair_batch pairs.txt   Batch visualize from file")
         print()
 
 
@@ -1891,6 +1900,16 @@ class MotifVisualizerGUI:
         print("\n  Next steps:")
         print(f"    rmv_view {motif_arg}              Highlight {motif_arg} on structure")
         print(f"    rmv_show {motif_arg}              Render & create objects for {motif_arg}")
+        # Source filter suggestions in combine mode
+        if self.current_source_mode == 'combine' and self.combined_source_ids:
+            from .database.config import SOURCE_ID_MAP
+            for sid in self.combined_source_ids:
+                info = SOURCE_ID_MAP.get(sid, {})
+                tool = info.get('tool', '')
+                name = info.get('name', f'Source {sid}')
+                alias = tool if tool else name.split()[0].lower()
+                print(f"    rmv_show {motif_arg} {alias:<16} Show {name}-only instances")
+            print(f"    rmv_show {motif_arg} shared           Show shared instances")
         print(f"    rmv_summary {motif_arg} <NO>      Show details of specific instance")
         print(f"    rmv_super {motif_arg}             Superimpose all {motif_arg} instances")
         print("="*70)
@@ -1902,6 +1921,7 @@ class MotifVisualizerGUI:
         Only prints when instances carry _source_label metadata (combine mode).
         Three categories: unique-to-source-A, unique-to-source-B, and shared
         (instances where the cascade merger detected overlap from both sources).
+        Also shows within-source deduplication counts when available.
         """
         # Collect per-instance source info
         source_only = {}   # source_label -> [instance_numbers]  (unique to that source)
@@ -1940,24 +1960,52 @@ class MotifVisualizerGUI:
             if lbl not in ordered_labels:
                 ordered_labels.append(lbl)
 
+        # Build source_id lookup for dedup stats
+        sid_for_label = {}
+        if self.current_source_mode == 'combine' and self.combined_source_ids:
+            from .database.config import SOURCE_ID_MAP
+            for sid in self.combined_source_ids:
+                lbl = SOURCE_ID_MAP.get(sid, {}).get('name', f'Source {sid}')
+                sid_for_label[lbl] = sid
+
         print("\n" + "-" * 70)
         print(f"  INSTANCES BY SOURCE — {motif_type}")
         print("-" * 70)
+
+        # Show within-source deduplication counts if available
+        if self.dedup_stats:
+            print("\n  Within-source deduplication:")
+            for label in ordered_labels:
+                sid = sid_for_label.get(label)
+                if sid and sid in self.dedup_stats:
+                    before, after = self.dedup_stats[sid]
+                    removed = before - after
+                    if removed > 0:
+                        print(f"    {label}: {before} → {after} (removed {removed} duplicates)")
+                    else:
+                        print(f"    {label}: {after} (no duplicates)")
+            # Also show labels not in source_only (they may only appear in shared)
+            for label in all_labels:
+                if label not in ordered_labels:
+                    sid = sid_for_label.get(label)
+                    if sid and sid in self.dedup_stats:
+                        before, after = self.dedup_stats[sid]
+                        removed = before - after
+                        if removed > 0:
+                            print(f"    {label}: {before} → {after} (removed {removed} duplicates)")
+                        else:
+                            print(f"    {label}: {after} (no duplicates)")
 
         total = len(motif_details)
         for label in ordered_labels:
             ids = source_only.get(label, [])
             count = len(ids)
             id_str = ', '.join(str(i) for i in ids) if ids else '-'
-            if len(id_str) > 200:
-                id_str = id_str[:200] + '...'
             print(f"\n  Unique in {label}: {count} instance(s)")
             print(f"    IDs: {id_str}")
 
         if shared_ids:
             id_str = ', '.join(str(i) for i in shared_ids)
-            if len(id_str) > 200:
-                id_str = id_str[:200] + '...'
             # Use the combo label from the first shared instance as header
             combo = shared_labels.get(shared_ids[0], 'Shared')
             print(f"\n  Shared ({combo}): {len(shared_ids)} instance(s)")
@@ -1965,7 +2013,82 @@ class MotifVisualizerGUI:
 
         print(f"\n  Total merged instances: {total}")
         print("-" * 70)
-    
+
+    def _resolve_source_filter(self, motif_type: str, source_filter: str):
+        """Resolve a source-filter keyword to instance numbers for a motif type.
+
+        Args:
+            motif_type: Uppercased motif type key (e.g., 'K-TURN')
+            source_filter: Case-insensitive keyword — a source name/alias
+                           (e.g., 'nobias', 'rmsx') or 'shared'.
+
+        Returns:
+            list[int] | None: 1-based instance numbers matching the filter,
+                              or None if the filter didn't match anything
+                              (caller should treat the word as part of the
+                              motif name instead).
+        """
+        if self.current_source_mode != 'combine':
+            return None
+
+        loaded_motifs = self._get_current_source_motifs()
+        if motif_type not in loaded_motifs:
+            return None
+
+        motif_details = loaded_motifs[motif_type].get('motif_details', [])
+        if not motif_details:
+            return None
+
+        # Categorise instances exactly like _print_source_attribution_report
+        source_only = {}   # source_label -> [1-based idx]
+        shared_ids = []    # 1-based idx list
+
+        for idx, detail in enumerate(motif_details, 1):
+            meta = detail.get('metadata', {})
+            label = meta.get('_source_label', '')
+            also = meta.get('_also_found_in', [])
+            if not label:
+                continue
+            if also:
+                shared_ids.append(idx)
+            else:
+                source_only.setdefault(label, []).append(idx)
+
+        sf = source_filter.upper()
+
+        # --- "shared" keyword ---
+        if sf == 'SHARED':
+            if shared_ids:
+                return shared_ids
+            return []
+
+        # --- Match against source labels ---
+        # Build a lookup: lowercase fragments -> full label
+        # Accept: full name, tool shorthand, or any word in the name
+        from .database.config import SOURCE_ID_MAP
+        alias_to_label = {}  # alias (upper) -> full label
+        for sid in (self.combined_source_ids or []):
+            info = SOURCE_ID_MAP.get(sid, {})
+            full_name = info.get('name', '')
+            if not full_name:
+                continue
+            # Full name exact
+            alias_to_label[full_name.upper()] = full_name
+            # Tool shorthand (e.g., 'rmsx', 'nobias', 'rms', 'fr3d')
+            tool = info.get('tool', '')
+            if tool:
+                alias_to_label[tool.upper()] = full_name
+            # Each word in the name (e.g., 'RNAMOTIFSCANX', 'RMSX')
+            for word in full_name.replace('(', '').replace(')', '').split():
+                alias_to_label[word.upper()] = full_name
+
+        matched_label = alias_to_label.get(sf)
+        if matched_label is None:
+            return None  # not a recognized source filter
+
+        ids = source_only.get(matched_label, [])
+        return sorted(ids)
+
     def show_motif_instance_summary(self, motif_type: str, instance_no: int):
         """Print details of a specific motif instance (for rmv_summary MOTIF NO).
         
@@ -2371,6 +2494,13 @@ class MotifVisualizerGUI:
         
         if extra_args:
             extra_str = str(extra_args).strip()
+            
+            # Strip surrounding quotes (PyMOL may preserve them from user input)
+            if len(extra_str) >= 2 and (
+                (extra_str[0] == "'" and extra_str[-1] == "'") or
+                (extra_str[0] == '"' and extra_str[-1] == '"')
+            ):
+                extra_str = extra_str[1:-1].strip()
             
             # Check if the argument looks like a file path
             import os
@@ -3025,21 +3155,41 @@ def initialize_gui():
             elif cif_str in ('1', 'on', 'true', 'auth'):
                 cif_auth_val = 1
         
-        # Validate PDB ID after stripping parameters
-        if not pdb_arg or len(pdb_arg) != 4 or not pdb_arg.isalnum():
-            gui.logger.error(f"Invalid PDB ID: '{pdb_arg}'")
-            gui.logger.error("PDB ID must be exactly 4 alphanumeric characters (e.g., 1S72)")
-            return
+        # Detect whether the argument is a local file path or a PDB ID
+        import os
+        is_file_path = (
+            os.sep in pdb_arg or
+            pdb_arg.startswith('~') or
+            pdb_arg.startswith('.') or
+            pdb_arg.endswith(('.pdb', '.cif', '.mmcif', '.pdb.gz', '.cif.gz', '.ent', '.ent.gz'))
+        )
+        
+        if is_file_path:
+            expanded = os.path.expanduser(pdb_arg)
+            if not os.path.isfile(expanded):
+                gui.logger.error(f"File not found: {expanded}")
+                return
+            
+            # Derive a structure name from the filename (strip extension)
+            base = os.path.basename(expanded)
+            structure_name = base.split('.')[0].lower()
+            display_id = structure_name.upper()
+        else:
+            # Validate PDB ID
+            if not pdb_arg or len(pdb_arg) != 4 or not pdb_arg.isalnum():
+                gui.logger.error(f"Invalid PDB ID: '{pdb_arg}'")
+                gui.logger.error("PDB ID must be exactly 4 alphanumeric characters (e.g., 1S72)")
+                gui.logger.error("For local files: rmv_fetch /path/to/file.cif")
+                return
+            expanded = None
+            structure_name = pdb_arg.lower()
+            display_id = pdb_arg.upper()
         
         gui.cif_use_auth = cif_auth_val
         
-        # Load the structure using PyMOL's fetch command
+        # Load the structure
         try:
-            # Structure name is just the PDB ID (no source suffix)
-            # Source-tagged naming only applies to motif objects
-            structure_name = pdb_arg.lower()
-            
-            # Set cif_use_auth before fetching
+            # Set cif_use_auth before loading
             try:
                 cmd.set("cif_use_auth", cif_auth_val)
             except Exception:
@@ -3054,31 +3204,37 @@ def initialize_gui():
                 cmd.delete(structure_name)
             except:
                 pass
-            cmd.fetch(pdb_arg, structure_name)
+            
+            if expanded:
+                # Local file — use cmd.load
+                cmd.load(expanded, structure_name)
+            else:
+                # PDB ID — use cmd.fetch
+                cmd.fetch(pdb_arg, structure_name)
             
             # Store loaded PDB info
             prev_pdb = gui.loaded_pdb_id
             gui.loaded_pdb = structure_name
-            gui.loaded_pdb_id = pdb_arg.upper()
+            gui.loaded_pdb_id = display_id
             
             # Set structure_loader fields
             gui.viz_manager.structure_loader.current_structure = structure_name
-            gui.viz_manager.structure_loader.current_pdb_id = pdb_arg.upper()
+            gui.viz_manager.structure_loader.current_pdb_id = display_id
             
             # Clear stale motif data when switching to a different PDB.
             # Keeps data when re-fetching the SAME PDB (source-switch workflow).
-            if prev_pdb and prev_pdb != pdb_arg.upper():
+            if prev_pdb and prev_pdb != display_id:
                 gui.viz_manager.motif_loader.loaded_motifs.clear()
                 gui.loaded_sources.clear()
             
             # Build auth→label chain mapping if in label mode
             gui.auth_to_label_map = {}
             if cif_auth_val == 0:
-                gui.auth_to_label_map = gui._build_auth_label_chain_mapping(pdb_arg)
+                gui.auth_to_label_map = gui._build_auth_label_chain_mapping(display_id)
             
             # Report chain ID mode
             chain_mode = "auth_asym_id (default)" if cif_auth_val == 1 else "label_asym_id"
-            gui.logger.success(f"Loaded structure {pdb_arg.upper()} as '{structure_name}'")
+            gui.logger.success(f"Loaded structure {display_id} as '{structure_name}'")
             gui.logger.info(f"Chain ID mode: {chain_mode}")
             
             # Get and display chains
@@ -3094,7 +3250,7 @@ def initialize_gui():
             gui.logger.info("Next steps:")
             if gui.current_source_mode:
                 gui.logger.info("  rmv_load_motif             Fetch motif data from current source")
-                gui.logger.info("  rmv_view motif             Highlight all motifs on structure")
+                gui.logger.info("  rmv_view all               Highlight all motifs on structure")
             else:
                 gui.logger.info("  rmv_db <N>                 Select a motif data source (1-8)")
             gui.logger.info("  rmv_sources                List all available sources")
@@ -3440,6 +3596,9 @@ def initialize_gui():
             rmv_show HL 1          - Show specific HL instance #1 (zoom + details)
             rmv_show HL 1,3,5     - Show specific HL instances 1, 3, 5
             rmv_show GNRA 2        - Show specific GNRA instance #2
+            rmv_show K-TURN nobias - Show K-TURN instances unique to NoBIAS (combine mode)
+            rmv_show K-TURN rmsx   - Show K-TURN instances unique to RMSX (combine mode)
+            rmv_show K-TURN shared - Show K-TURN instances found in both sources
             rmv_show 4-WAY JUNCTION (J4)      - Multi-word motif type
             rmv_show 4-WAY JUNCTION (J4) 1    - Multi-word with instance
         """
@@ -3494,6 +3653,21 @@ def initialize_gui():
         if not all_parts:
             gui.logger.error("Usage: rmv_show <MOTIF_TYPE> [<INSTANCE_NO>]")
             return
+
+        # --- Source filter detection (combine mode) ---
+        # e.g. "rmv_show K-TURN nobias" or "rmv_show K-TURN shared"
+        # The last non-numeric token may be a source keyword.
+        source_filter_ids = None
+        source_filter_word = None
+        if not instance_nums and len(all_parts) >= 2:
+            candidate = all_parts[-1]
+            # Try treating everything except the last token as the motif name
+            candidate_motif = " ".join(all_parts[:-1]).upper()
+            resolved = gui._resolve_source_filter(candidate_motif, candidate)
+            if resolved is not None:
+                source_filter_ids = resolved
+                source_filter_word = candidate
+                all_parts = all_parts[:-1]  # Remove filter word from motif name
         
         raw_motif = " ".join(all_parts)
         motif_arg, inst_no = _resolve_motif_type_and_instance(raw_motif, '')
@@ -3502,6 +3676,15 @@ def initialize_gui():
         # (e.g. "K-TURN 1" from PyMOL comma-split of "K-TURN 1,2")
         if inst_no is not None and inst_no not in instance_nums:
             instance_nums.insert(0, inst_no)
+
+        # If a source filter was detected, use those IDs as instance_nums
+        if source_filter_ids is not None:
+            if not source_filter_ids:
+                gui.logger.info(
+                    f"No instances of {motif_arg} unique to "
+                    f"'{source_filter_word}' in the combined result.")
+                return
+            instance_nums = source_filter_ids
         
         # Source filter params — restrict display to current PDB + source
         fpdb = gui.loaded_pdb_id or ''
@@ -3523,19 +3706,50 @@ def initialize_gui():
         """PyMOL command: Zoom to motif regions on the base structure (no objects).
 
         Usage:
-            rmv_view motif            Highlight ALL motif regions on structure
+            rmv_view all              Highlight ALL motif regions on structure
             rmv_view K-TURN           Zoom to all K-TURN instances
             rmv_view K-TURN 1         Zoom to instance #1 and create selection
+            rmv_view hide             Reset all view coloring to gray
+            rmv_view K-TURN hide      Reset only K-TURN view coloring
         """
-        all_parts = [str(motif_type)] + [str(a) for a in extra_args]
+        # Build parts list — split first arg by spaces for robustness
+        # (PyMOL may pass 'K-TURN hide' as a single string)
+        first_parts = str(motif_type).split() if motif_type else []
+        rest_parts = [str(a) for a in extra_args]
+        all_parts = first_parts + rest_parts
         all_parts = [p.strip() for p in all_parts if p.strip()]
 
         if not all_parts:
-            gui.logger.error("Usage: rmv_view motif | rmv_view <TYPE> [<NO>]")
+            gui.logger.error("Usage: rmv_view all | rmv_view <TYPE> [<NO>] | rmv_view hide")
             return
 
-        # Handle 'rmv_view motif' — highlight all motif regions on structure
-        if len(all_parts) == 1 and all_parts[0].upper() == 'MOTIF':
+        # Handle 'rmv_view hide' — reset ALL view coloring
+        if len(all_parts) == 1 and all_parts[0].upper() == 'HIDE':
+            fpdb = gui.loaded_pdb_id or ''
+            fsuf = gui._get_source_suffix()
+            gui.viz_manager.reset_view_coloring(
+                filter_pdb=fpdb, filter_suffix=fsuf)
+            return
+
+        # Handle 'rmv_view K-TURN hide' or 'rmv_view K-TURN 1 hide'
+        # Also handle 'rmv_view all hide' as a full reset
+        if len(all_parts) >= 2 and all_parts[-1].upper() == 'HIDE':
+            motif_parts = [p for p in all_parts[:-1] if not p.isdigit()]
+            raw_motif = " ".join(motif_parts)
+            fpdb = gui.loaded_pdb_id or ''
+            fsuf = gui._get_source_suffix()
+            # 'rmv_view all hide' = reset everything
+            if raw_motif.upper() in ('ALL', 'MOTIF'):
+                gui.viz_manager.reset_view_coloring(
+                    filter_pdb=fpdb, filter_suffix=fsuf)
+            else:
+                motif_arg, _ = _resolve_motif_type_and_instance(raw_motif, '')
+                gui.viz_manager.reset_view_coloring(
+                    motif_arg, filter_pdb=fpdb, filter_suffix=fsuf)
+            return
+
+        # Handle 'rmv_view all' — highlight all motif regions on structure
+        if len(all_parts) == 1 and all_parts[0].upper() in ('ALL', 'MOTIF'):
             structure_name = None
             if gui.viz_manager and gui.viz_manager.structure_loader:
                 structure_name = gui.viz_manager.structure_loader.get_current_structure()
@@ -3551,7 +3765,7 @@ def initialize_gui():
             instance_nums.insert(0, int(all_parts.pop()))
 
         if not all_parts:
-            gui.logger.error("Usage: rmv_view motif | rmv_view <TYPE> [<NO>]")
+            gui.logger.error("Usage: rmv_view all | rmv_view <TYPE> [<NO>] | rmv_view hide")
             return
 
         raw_motif = " ".join(all_parts)
@@ -3783,6 +3997,30 @@ def initialize_gui():
         def _is_cif(s):
             return s.lower() in ('cif', 'mmcif')
         
+        # Helper: suggest closest match for a mistyped argument
+        def _suggest(word, candidates):
+            """Return the closest candidate using simple edit-distance heuristic."""
+            word_up = word.upper()
+            # Exact prefix match first
+            prefix_hits = [c for c in candidates if c.startswith(word_up)]
+            if prefix_hits:
+                return prefix_hits[0]
+            # Substring match
+            sub_hits = [c for c in candidates if word_up in c or c in word_up]
+            if sub_hits:
+                return sub_hits[0]
+            # Simple character-overlap score
+            def _score(a, b):
+                a, b = a.upper(), b.upper()
+                if not a or not b:
+                    return 0
+                common = sum(1 for c in a if c in b)
+                return common / max(len(a), len(b))
+            best = max(candidates, key=lambda c: _score(word, c), default=None)
+            if best and _score(word, best) > 0.4:
+                return best
+            return None
+        
         representation = 'cartoon'  # Default
         
         if arguments[0].upper() == 'ALL':
@@ -3809,8 +4047,14 @@ def initialize_gui():
             motif_type = arguments[0].upper()
             
             if motif_type not in loaded_motifs:
-                gui.logger.error(f"Motif type '{motif_type}' not found")
+                # Check for possible typos against known keywords and motif types
+                all_candidates = ['ALL', 'CURRENT'] + sorted(loaded_motifs.keys())
+                suggestion = _suggest(arguments[0], all_candidates)
+                gui.logger.error(f"Unknown argument '{arguments[0]}'")
+                if suggestion:
+                    gui.logger.info(f"Did you mean: rmv_save {suggestion}?")
                 gui.logger.info(f"Available: {', '.join(sorted(loaded_motifs.keys()))}")
+                gui.logger.info("Other options: ALL, CURRENT")
                 return
             
             if len(arguments) == 1:
@@ -3997,7 +4241,7 @@ def initialize_gui():
         print("     rmv_db <N>                # Select data source (1-8)")
         print("     rmv_load_motif            # Fetch motif data")
         print("     rmv_summary               # Show motif types & counts")
-        print("     rmv_view motif            # Highlight all motifs on structure")
+        print("     rmv_view all              # Highlight all motifs on structure")
         print("     rmv_show HL               # Render hairpin loops")
         print()
     

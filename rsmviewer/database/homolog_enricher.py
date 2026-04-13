@@ -99,6 +99,7 @@ class HomologEnricher:
         representative_loader,
         bgsu_provider,
         jaccard_threshold: float = 0.60,
+        fallback_threshold: float = 0.85,
     ):
         """
         Initialize the HomologEnricher.
@@ -107,10 +108,14 @@ class HomologEnricher:
             representative_loader: RepresentativeSetLoader instance
             bgsu_provider: BGSUAPIProvider instance (for fetching rep annotations)
             jaccard_threshold: Minimum Jaccard similarity for residue-based fallback
+            fallback_threshold: Higher threshold used only for self-representative
+                Jaccard fallback (default 0.85). Kept separate from the general
+                jaccard_threshold used elsewhere.
         """
         self.rep_loader = representative_loader
         self.bgsu_provider = bgsu_provider
         self.threshold = jaccard_threshold
+        self.fallback_threshold = fallback_threshold
         # Cache: {rep_pdb: {motif_category: [MotifInstance, ...]}}
         self._rep_annotation_cache: Dict[str, Dict[str, List[MotifInstance]]] = {}
         # Cache: {rep_pdb: {motif_group_id: specific_category_name}}
@@ -185,7 +190,8 @@ class HomologEnricher:
                 
                 # Try to find a specific name via motif_group
                 new_name = self._find_homolog_name(
-                    instance, pdb_id, chain_reps, is_self_rep
+                    instance, pdb_id, chain_reps, is_self_rep,
+                    motif_type=motif_type,
                 )
                 
                 if new_name and new_name != motif_type:
@@ -290,6 +296,7 @@ class HomologEnricher:
         pdb_id: str,
         chain_reps: Dict[str, Tuple[str, str]],
         is_self_rep: bool,
+        motif_type: str = '',
     ) -> Optional[str]:
         """
         Find a specific motif name from the representative for a generic motif.
@@ -297,13 +304,15 @@ class HomologEnricher:
         Primary strategy: Use motif_group ID to look up the specific annotation
         in the representative's group->category mapping.
         
-        Fallback (self-representative only): Jaccard residue number comparison.
+        Fallback (self-representative only): Same-type Jaccard residue comparison
+        with a higher threshold (0.85) and exact-match priority.
         
         Args:
             instance: The generic motif instance to enrich
             pdb_id: The query PDB ID
             chain_reps: Chain-to-representative mappings
             is_self_rep: Whether the PDB is its own representative
+            motif_type: The generic motif type key (e.g., 'HL', 'IL', 'J3')
             
         Returns:
             Specific motif name, or None if no match found
@@ -324,63 +333,131 @@ class HomologEnricher:
         
         # --- Strategy 2: Jaccard fallback (self-representative only) ---
         if is_self_rep:
-            return self._jaccard_fallback(instance, pdb_id, chain_reps)
+            return self._jaccard_fallback(
+                instance, pdb_id, chain_reps, motif_type=motif_type,
+            )
         
         return None
     
+    @staticmethod
+    def _extract_loop_type(motif_type: str) -> str:
+        """Extract the base loop type (HL, IL, J3, etc.) from a generic name.
+        
+        Handles both short codes ('HL') and descriptive names
+        ('Hairpin Loop (HL)', 'Internal Loop (IL)', '3-way Junction (J3)').
+        """
+        import re as _re
+        # Try parenthesized short code first: "Hairpin Loop (HL)" -> "HL"
+        m = _re.search(r'\(([A-Z][A-Z0-9]+)\)', motif_type)
+        if m:
+            return m.group(1)
+        # Already a short code
+        short = motif_type.strip().upper()
+        if short in ('HL', 'IL') or _re.match(r'^J\d$', short):
+            return short
+        return ''
+
     def _jaccard_fallback(
         self,
         instance: MotifInstance,
         pdb_id: str,
         chain_reps: Dict[str, Tuple[str, str]],
+        motif_type: str = '',
     ) -> Optional[str]:
         """
-        Fallback matching using Jaccard residue similarity.
+        Context-aware fallback using Jaccard residue similarity.
         
-        Only works for self-representative PDBs where residue numbers
-        are identical between member and representative.
+        Only works for self-representative PDBs (residue numbers are
+        identical between member and representative).
+        
+        Constraints (conservative):
+        1. Only compare within the SAME generic loop type
+           (HL with HL, IL with IL, J3 with J3, etc.).
+        2. Exact residue match is accepted immediately.
+        3. Uses a higher threshold (fallback_threshold, default 0.85)
+           than the general Jaccard threshold.
+        4. Never maps across different loop types.
         
         Args:
             instance: The generic motif instance
             pdb_id: The PDB ID
             chain_reps: Chain-to-representative mappings
+            motif_type: The generic motif type key (e.g., 'HL', 'IL')
             
         Returns:
             Specific motif name, or None
         """
+        # Derive the base loop type so we only compare within the same type
+        query_loop_type = (
+            instance.metadata.get('loop_type', '')
+            or self._extract_loop_type(motif_type)
+        )
+        if not query_loop_type:
+            logger.debug(
+                f"[ENRICHER] Jaccard fallback skipped for {instance.instance_id}: "
+                f"cannot determine loop type from '{motif_type}'"
+            )
+            return None
+
         motif_chains = instance.get_chains()
         best_name = None
         best_score = 0.0
-        
+
         for mem_chain in motif_chains:
             if mem_chain not in chain_reps:
                 continue
             rep_pdb, rep_chain = chain_reps[mem_chain]
-            
+
             annotations = self._rep_annotation_cache.get(rep_pdb)
             if not annotations:
                 continue
-            
+
             member_residues = {
                 r.residue_number for r in instance.residues
                 if r.chain == mem_chain
             }
             if not member_residues:
                 continue
-            
+
             for rep_type, rep_instances in annotations.items():
                 if _is_generic_name(rep_type):
                     continue
+
                 for rep_inst in rep_instances:
+                    # --- Same-type restriction ---
+                    rep_loop_type = rep_inst.metadata.get('loop_type', '')
+                    if not rep_loop_type:
+                        # Try to derive from motif_group prefix (e.g., 'HL_34789.4')
+                        mg = rep_inst.metadata.get('motif_group', '')
+                        if mg:
+                            rep_loop_type = mg.split('_')[0]
+                    if rep_loop_type != query_loop_type:
+                        continue  # Never match across types
+
                     rep_residues = {
                         r.residue_number for r in rep_inst.residues
                         if r.chain == rep_chain
                     }
                     if not rep_residues:
                         continue
+
+                    # --- Exact match priority ---
+                    if member_residues == rep_residues:
+                        logger.debug(
+                            f"[ENRICHER] Exact fallback match: "
+                            f"{instance.instance_id} -> '{rep_type}'"
+                        )
+                        return rep_type
+
                     score = _jaccard_similarity(member_residues, rep_residues)
-                    if score >= self.threshold and score > best_score:
+                    if score >= self.fallback_threshold and score > best_score:
                         best_score = score
                         best_name = rep_type
-        
+
+        if best_name:
+            logger.debug(
+                f"[ENRICHER] Jaccard fallback: {instance.instance_id} "
+                f"-> '{best_name}' (score={best_score:.3f}, "
+                f"type={query_loop_type})"
+            )
         return best_name

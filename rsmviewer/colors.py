@@ -50,10 +50,10 @@ MOTIF_COLORS = {
     'U-TURN': (0.9, 0.7, 0.0),              # Gold (alias)
     
     # K-turns and variants
-    'K_TURN_1': (0.0, 0.6, 1.0),            # Bright blue
-    'K-TURN-1': (0.0, 0.6, 1.0),            # Alias
-    'K_TURN_2': (0.2, 0.4, 0.8),            # Medium blue
-    'K-TURN-2': (0.2, 0.4, 0.8),            # Alias
+    'K_TURN_1': (1.0, 1.0, 0.0),            # Bright yellow
+    'K-TURN-1': (1.0, 1.0, 0.0),            # Alias
+    'K_TURN_2': (0.95, 0.9, 0.2),           # Warm yellow
+    'K-TURN-2': (0.95, 0.9, 0.2),           # Alias
     'PK_TURN': (0.4, 0.2, 0.8),             # Violet
     'PK-TURN': (0.4, 0.2, 0.8),             # Alias
     
@@ -72,14 +72,14 @@ MOTIF_COLORS = {
     'DOCKING-ELBOW': (0.7, 0.5, 0.3),       # Alias
     
     # E-Loop
-    'E_LOOP': (0.2, 0.6, 0.2),              # Forest green
-    'E-LOOP': (0.2, 0.6, 0.2),              # Forest green (alias)
+    'E_LOOP': (0.0, 1.0, 1.0),              # Bright cyan
+    'E-LOOP': (0.0, 1.0, 1.0),              # Bright cyan (alias)
     
     # K-turn (generic / without number suffix)
-    'K_TURN': (0.0, 0.6, 1.0),              # Bright blue (same as K_TURN_1)
-    'K-TURN': (0.0, 0.6, 1.0),              # Alias
-    'KINK_TURN': (0.0, 0.5, 0.9),           # Blue variant
-    'KINK-TURN': (0.0, 0.5, 0.9),           # Alias
+    'K_TURN': (1.0, 1.0, 0.0),              # Bright yellow (same as K_TURN_1)
+    'K-TURN': (1.0, 1.0, 0.0),              # Alias
+    'KINK_TURN': (0.95, 0.9, 0.2),          # Yellow variant
+    'KINK-TURN': (0.95, 0.9, 0.2),          # Alias
     
     # Reverse K-turn
     'REVERSE_KTURN': (0.6, 0.3, 0.9),       # Blue-violet
@@ -174,17 +174,17 @@ PYMOL_COLOR_NAMES = {
     'CUYG': 'purple',
     'T_LOOP': 'pink',
     'C_LOOP': 'sky-blue',
-    'E_LOOP': 'forest-green',
+    'E_LOOP': 'cyan',
     'U_TURN': 'gold',
-    'K_TURN': 'bright-blue',
-    'K_TURN_1': 'marine',
-    'K_TURN_2': 'medium-blue',
+    'K_TURN': 'yellow',
+    'K_TURN_1': 'yellow',
+    'K_TURN_2': 'yellow',
     'REVERSE_KTURN': 'blue-violet',
     'SARCIN_RICIN': 'dark-red',
     'SARCIN_RICIN_1': 'firebrick',
     'SARCIN_RICIN_2': 'coral-red',
     'PK_TURN': 'violet',
-    'KINK_TURN': 'blue',
+    'KINK_TURN': 'yellow',
 }
 
 

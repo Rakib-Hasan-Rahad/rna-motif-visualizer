@@ -29,28 +29,27 @@ PyMOL
 ├── gui.py                 Command registration & GUI state (MotifVisualizerGUI)
 ├── loader.py              Visualization pipeline (StructureLoader, UnifiedMotifLoader, VisualizationManager)
 ├── alignment.py           Medoid superimposition pipeline (rmv_super / rmv_align)
-├── colors.py              30+ motif color definitions + custom color support
-├── image_saver.py         PNG export with multiple representations
-├── structure_exporter.py   mmCIF export (original coordinates from disk)
+├── colors.py              90+ motif color definitions + custom color support
+├── image_saver.py         PNG export with 8 representations
+├── structure_exporter.py  mmCIF export (original coordinates from disk)
 ├── database/
 │   ├── config.py          SOURCE_ID_MAP (8 sources), SourceMode, PluginConfig
 │   ├── base_provider.py   ResidueSpec, MotifInstance, MotifType, BaseProvider ABC
 │   ├── registry.py        DatabaseRegistry — lazily loads providers
-│   ├── atlas_provider.py  Atlas JSON provider (759 PDBs)
-│   ├── rfam_provider.py   Rfam Stockholm provider (173 PDBs)
+│   ├── atlas_provider.py  Atlas JSON provider
+│   ├── rfam_provider.py   Rfam Stockholm provider
 │   ├── bgsu_api_provider.py  Hybrid HTML scraping + CSV fallback (~3000+ PDBs)
-│   ├── rfam_api_provider.py  Rfam API (GNRA, UNCG, K-turn, etc.)
+│   ├── rfam_api_provider.py  Rfam API (34 motif families, RM00001–RM00034)
 │   ├── source_selector.py  Smart source selection with fallback chain
-│   ├── cascade_merger.py   Right-to-left merge with Jaccard dedup (≥60%)
+│   ├── source_registry.py  Source registry
+│   ├── cascade_merger.py   Category-aware merge with Jaccard dedup (≥60%)
 │   ├── homolog_enricher.py NR representative lookup for semantic enrichment
 │   ├── cache_manager.py    30-day disk cache at ~/.rsmviewer_cache/
 │   ├── converters.py       Format converters for provider outputs
-│   ├── motif_merger.py     Legacy merger (superseded by cascade_merger)
-│   ├── source_registry.py  Alternate registry (deprecated)
 │   ├── representative_set.py NR list loader
 │   ├── nrlist_4.24_all.csv   BGSU NR representative list
 │   └── user_annotations/
-│       ├── user_provider.py  FR3D/RMS/RMSX annotation loader
+│       ├── user_provider.py  FR3D/RMS/RMSX/NoBIAS annotation loader
 │       └── converters.py     User annotation format parsers
 └── utils/
     ├── logger.py          PluginLogger with colored PyMOL console output
@@ -61,19 +60,31 @@ PyMOL
 ### Data Flow
 
 ```
-rmv_fetch <PDB>  →  PyMOL cmd.fetch()  →  store loaded_pdb / loaded_pdb_id
-                                         →  parse CIF for auth→label chain map (if cif_use_auth=0)
+rmv_fetch <PDB>  →  PyMOL cmd.fetch() / cmd.load()
+                     →  store loaded_pdb / loaded_pdb_id
+                     →  parse CIF for auth→label chain map (if cif_use_auth=0)
 
 rmv_db <N>       →  set source mode + provider config in GUI state
 
 rmv_load_motif   →  dispatch to:
-                     ├── Local/Web:  fetch_motif_data_action()
-                     │   └── source_selector → provider.get_motifs() → enrich → merge → store
-                     └── User:  load_user_annotations_action()
-                         └── user_provider.load_annotations() → parse → store
+                     ├── Single source (local/web):
+                     │   └── fetch_motif_data_action()
+                     │       └── source_selector → provider.get_motifs() → store
+                     ├── User source (5–8):
+                     │   └── load_user_annotations_action()
+                     │       └── user_provider.load_annotations() → parse → store
+                     └── Combine mode (multiple sources):
+                         └── _load_combined_motifs()
+                             └── fetch each → enrich → stamp → dedup → cascade merge → store
 
 rmv_show <TYPE>  →  VisualizationManager.show_motif_type()
                      └── create PyMOL objects + color selections
+
+rmv_view <TYPE>  →  gui.view_motif_action()
+                     └── color residues in-place on structure (no objects)
+
+rmv_super <TYPE> →  alignment.py → MedoidSuperimposer
+                     └── pairwise RMSD matrix → medoid → cmd.super all onto medoid
 
 rmv_save <TYPE>  →  ImageSaver.save_motif_images()
                      └── render + ray + png for each instance
@@ -90,42 +101,48 @@ rmv_save <TYPE> cif  →  StructureExporter.export_instance()
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `gui.py` | ~3900 | Main GUI class, all 24 command registrations, state management |
-| `loader.py` | ~1640 | StructureLoader, UnifiedMotifLoader, VisualizationManager |
-| `plugin.py` | ~120 | Entry point, cif_use_auth lock, welcome banner |
-| `colors.py` | ~330 | MOTIF_COLORS dict, custom overrides, PyMOL color application |
+| `gui.py` | ~4260 | Main GUI class, 22 command registrations (20 direct + 2 from alignment), state management |
+| `loader.py` | ~2060 | StructureLoader, UnifiedMotifLoader, VisualizationManager |
+| `alignment.py` | ~990 | Medoid superimposition pipeline (rmv_super / rmv_align) |
 | `image_saver.py` | ~580 | PNG export for individual motif instances + current view |
-| `structure_exporter.py` | ~350 | mmCIF export — extracts original coordinates from disk CIF |
-| `__init__.py` | ~45 | Package metadata, lazy imports |
-| `alignment.py` | ~700 | Medoid superimposition pipeline (rmv_super / rmv_align) |
-| `pair_visualizer.py` | ~500 | Base-pair visualization with Leontis-Westhof labels |
-| `cluster_visualizer.py` | ~300 | Cluster analysis visualization |
+| `structure_exporter.py` | ~520 | mmCIF export — extracts original coordinates from disk CIF |
+| `colors.py` | ~420 | MOTIF_COLORS dict (90+ entries), custom overrides, dynamic pool, PyMOL color application |
+| `plugin.py` | ~120 | Entry point, cif_use_auth lock, welcome banner |
+| `__init__.py` | ~43 | Package metadata (version 1.0.0), lazy imports |
 
 ### Database Module
 
-| File | Purpose |
-|------|---------|
-| `config.py` | SOURCE_ID_MAP (8 entries), SourceMode enum, PluginConfig dataclass |
-| `base_provider.py` | ABC for all providers: ResidueSpec, MotifInstance, MotifType, BaseProvider |
-| `registry.py` | DatabaseRegistry — discovers and registers providers |
-| `atlas_provider.py` | Parses bundled Atlas JSON files (759 PDBs, 7 motif types: HL, IL, J3-J7) |
-| `rfam_provider.py` | Parses bundled Rfam Stockholm files (173 PDBs, 19 motif types) |
-| `bgsu_api_provider.py` | Hybrid: HTML scraping from rna.bgsu.edu + CSV fallback for loop data |
-| `rfam_api_provider.py` | REST API calls to Rfam for motif family annotations |
-| `source_selector.py` | Routes source selection to appropriate provider(s) |
-| `cascade_merger.py` | Merges motifs from multiple sources with Jaccard deduplication |
-| `homolog_enricher.py` | Enriches generic motif names using NR homolog representatives |
-| `cache_manager.py` | Disk cache with 30-day expiry at `~/.rsmviewer_cache/` |
-| `converters.py` | Converts provider-specific output to unified MotifInstance format |
-| `representative_set.py` | Loads BGSU NR representative list for homolog lookup |
+| File | Lines | Purpose |
+|------|-------|---------|
+| `config.py` | ~247 | SOURCE_ID_MAP (8 entries), SourceMode enum, PluginConfig dataclass |
+| `base_provider.py` | ~362 | ABC for all providers: ResidueSpec, MotifInstance, MotifType, BaseProvider |
+| `registry.py` | ~302 | DatabaseRegistry — discovers and registers providers |
+| `atlas_provider.py` | ~278 | Parses bundled Atlas JSON files (7 motif types: HL, IL, J3–J7) |
+| `rfam_provider.py` | ~251 | Parses bundled Rfam Stockholm/SEED files (19 motif types) |
+| `bgsu_api_provider.py` | ~714 | Hybrid: HTML scraping from rna.bgsu.edu + CSV fallback for loop data |
+| `rfam_api_provider.py` | ~346 | REST API calls to Rfam for 34 motif family annotations |
+| `source_selector.py` | ~301 | Routes source selection to appropriate provider(s) |
+| `source_registry.py` | ~141 | Source registry |
+| `cascade_merger.py` | ~527 | Merges motifs from multiple sources with Jaccard deduplication |
+| `homolog_enricher.py` | ~463 | Enriches generic motif names using NR homolog representatives |
+| `cache_manager.py` | ~405 | Disk cache with 30-day expiry, version 2.1, auto-invalidation |
+| `converters.py` | ~499 | Converts provider-specific output to unified MotifInstance format |
+| `representative_set.py` | ~221 | Loads BGSU NR representative list for homolog lookup |
+
+### User Annotations
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `user_provider.py` | ~552 | Unified provider for FR3D, RMS, RMSX, NoBIAS |
+| `converters.py` | ~787 | FR3D CSV parser, RMS tab parser, RMSX log parser, NoBIAS parser |
 
 ### Utils Module
 
-| File | Purpose |
-|------|---------|
-| `logger.py` | `PluginLogger` — colored console output via `cmd.feedback` |
-| `parser.py` | Parses PDB IDs, file paths, selection strings |
-| `selectors.py` | 3-layer chain ID protection: builds safe PyMOL selection strings |
+| File | Lines | Purpose |
+|------|-------|---------|
+| `logger.py` | ~82 | `PluginLogger` — colored console output (info/warning/error/success/debug) |
+| `parser.py` | ~147 | Parses PDB IDs, file paths, selection strings |
+| `selectors.py` | ~366 | 3-layer chain ID protection: builds safe PyMOL selection strings |
 
 ---
 
@@ -134,98 +151,67 @@ rmv_save <TYPE> cif  →  StructureExporter.export_instance()
 When PyMOL loads the plugin (`__init_plugin__` in `plugin.py`):
 
 1. **Logger setup** — `initialize_logger(use_pymol_console=True)`
-2. **Chain ID lock** — `cmd.set("cif_use_auth", 1)` — ensures auth_asym_id by default
-3. **Registry init** — `initialize_registry()` — registers Atlas and Rfam providers
-4. **GUI init** — `initialize_gui()` — creates `MotifVisualizerGUI` and registers all 24 commands
-5. **Welcome banner** — prints version, sources, quick start
+2. **Welcome banner** — prints ASCII box with version (1.0.0), available sources, and quick start guide
+3. **Chain ID lock** — `cmd.set("cif_use_auth", 1)` — ensures auth_asym_id by default
+4. **Registry init** — `initialize_registry()` — registers Atlas and Rfam providers
+5. **GUI init** — `initialize_gui()` — creates `MotifVisualizerGUI`, registers all 22 commands via `cmd.extend()`, and calls `register_alignment_commands()` for `rmv_super`/`rmv_align`
 
 ---
 
 ## 4. Command Reference
 
-All 24 commands are registered in `gui.py` via `cmd.extend()`.
+All commands are registered via `cmd.extend()`. 20 are registered directly in `gui.py`, 2 are registered in `alignment.py` via `register_alignment_commands()`.
 
 ### Loading & Data
 
-#### `rmv_fetch <PDB_ID> [cif_use_auth=0] [bg_color=COLOR]`
+#### `rmv_fetch <PDB_ID> [, cif_use_auth=0|1] [, bg_color=COLOR]`
 
 Downloads and loads a PDB/mmCIF structure. Does NOT fetch motif data.
 
-**Implementation:** `fetch_raw_pdb()` → `gui.fetch_raw_pdb()` in `gui.py`
+**Implementation:** `fetch_raw_pdb()` in `gui.py`
 
 **Key behavior:**
-- Regex-parses `cif_use_auth=` and `bg_color=` from raw input string (PyMOL space-separation workaround)
-- Validates PDB ID: exactly 4 alphanumeric characters
-- Sets `cmd.set("cif_use_auth", val)` before `cmd.fetch()`
+- Accepts PDB IDs (4 alphanumeric characters) or local file paths (`.pdb`, `.cif`, `.mmcif`, `.pdb.gz`, `.cif.gz`, `.ent`, `.ent.gz`)
+- Local paths detected by: path separators, `~` prefix, `.` prefix, or file extensions
+- Regex-parses `cif_use_auth=` and `bg_color=` from raw input (PyMOL space-separation workaround)
+- `cif_use_auth` accepts: `0`/`off`/`false`/`label` or `1`/`on`/`true`/`auth`
+- Sets `cmd.set("cif_use_auth", val)` before `cmd.fetch()` / `cmd.load()`
 - If `cif_use_auth=0`: calls `_build_auth_label_chain_mapping()` to parse CIF `_atom_site` loop
 - Stores `loaded_pdb`, `loaded_pdb_id`, `auth_to_label_map` on GUI object
-- Clears previously loaded motifs
+- When switching to a different PDB, clears stale motif data and `loaded_sources`
+- Reports chains found (up to 20 displayed, remainder counted)
 
-**Example:**
 ```
 rmv_fetch 1S72
-rmv_fetch 1S72 cif_use_auth=0
+rmv_fetch 1S72, cif_use_auth=0
 rmv_fetch 1S72, bg_color=white
+rmv_fetch /path/to/local.cif
+rmv_fetch ~/structures/1s72.pdb
 ```
 
 ---
 
 #### `rmv_load_motif`
 
-Fetches motif data from the currently selected source for the loaded PDB.
+Fetches motif data from the currently selected source for the loaded PDB. Takes no arguments.
 
-**Implementation:** `load_motif_data()` → dispatches to `fetch_motif_data_action()` or `load_user_annotations_action()`
+**Implementation:** `load_motif_data()` → dispatches to:
+- `fetch_motif_data_action()` for curated sources (1–4)
+- `load_user_annotations_action()` for user sources (5–8)
+- `_load_combined_motifs()` for combine mode
 
-**Key behavior:**
-- Requires both `loaded_pdb_id` and `current_source_mode` to be set
-- For local/web sources: calls `fetch_motif_data_action(pdb_id)` which uses `source_selector`
-- For user sources: calls `load_user_annotations_action(tool, pdb_id)`
-- Applies `auth_to_label_map` chain remapping when `cif_use_auth=0`
-
-**Example:**
-```
-rmv_load_motif
-```
+**Prerequisites:** A PDB must be loaded (`rmv_fetch`) and a source selected (`rmv_db`).
 
 ---
 
-#### `rmv_load <PDB_ID> [, bg_color=COLOR] [, database=atlas|rfam]`
+#### `rmv_db <N> [N ...] [on|off] [MOTIF P_VALUE ...] [/path/to/data] [, jaccard_threshold=VALUE]`
 
-Legacy one-step command: loads structure AND fetches motifs from previously selected source.
+Sets the active data source. Supports multi-source combine, P-value filtering, and custom data paths.
 
-**Implementation:** `load_structure()` → `gui.load_structure_action()`
-
-**Example:**
-```
-rmv_load 1S72
-rmv_load 1S72, database=atlas, bg_color=white
-```
-
----
-
-#### `rmv_refresh [PDB_ID]`
-
-Force-refreshes motif data from API sources (bypasses 30-day cache).
-
-**Implementation:** `refresh_motifs()` → `gui.refresh_motifs_action()`
-
-**Example:**
-```
-rmv_refresh
-rmv_refresh 4V9F
-```
-
----
-
-### Source Selection
-
-#### `rmv_db <N> [N ...] [on|off] [MOTIF P_VALUE ...] [/path/to/data]`
-
-Sets the active data source by ID number (1-8). Supports multi-source combine, P-value filtering, and custom data paths.
-
-**Implementation:** `select_database()` → `gui._handle_source_by_id()` / `gui._handle_combine_sources()`
+**Implementation:** `select_database()` → `_handle_source_by_id()` / `_handle_combine_sources()`
 
 **Source IDs:**
+
 | ID | Provider | Type |
 |----|----------|------|
 | 1 | RNA 3D Atlas | Local |
@@ -233,50 +219,32 @@ Sets the active data source by ID number (1-8). Supports multi-source combine, P
 | 3 | BGSU RNA 3D Hub | Web API |
 | 4 | Rfam API | Web API |
 | 5 | FR3D | User annotations |
-| 6 | RNAMotifScan (RMS) | User annotations |
-| 7 | RNAMotifScanX (RMSX) | User annotations |
-| 8 | NoBIAS | User annotations |
+| 6 | RNAMotifScan (RMS) | User annotations + filtering |
+| 7 | RNAMotifScanX (RMSX) | User annotations + filtering |
+| 8 | NoBIAS | User annotations + filtering |
 
-**Multi-source:**
-```
-rmv_db 1 3               # Combine Atlas + BGSU
-rmv_db 1 3 4             # Combine three sources
-```
+**Multi-source detection:** When remaining args after the first source ID contain another valid source ID, combine mode is triggered.
 
-**P-value filtering (RMS/RMSX/NoBIAS):**
-```
-rmv_db 6 off                          # Disable filtering
-rmv_db 6 on                           # Enable filtering
-rmv_db 6 SARCIN-RICIN 0.01            # Custom P-value threshold
-rmv_db 7 C-LOOP_CONSENSUS 0.05        # RMSX custom threshold
-```
+**Jaccard threshold parsing:** Values >1.0 treated as percentages (e.g., `80` → `0.80`). Trailing `%` stripped. Default: `0.60`.
 
-**Custom data path (sources 5-8, per-source):**
-```
-rmv_db 5 /path/to/fr3d/data           # FR3D with custom directory
-rmv_db 6 ~/my_rms_data                # RMS with home-relative path
-rmv_db 7 /path/to/rmsx/data           # RMSX with custom directory
-rmv_db 8 /path/to/nobias/data         # NoBIAS with custom directory
-```
+**Custom paths:** Detected by presence of `/` or `\`. Stored per-source in `self.user_data_paths: Dict[int, str]`.
 
-> Paths are stored per-source in `self.user_data_paths: Dict[int, str]`. Setting a path for source 7 does not overwrite the path for source 8.
-
-**Info subcommand (via rmv_source):**
 ```
-rmv_source info              # Show currently active source
-rmv_source info 3            # Detailed info about BGSU source
+rmv_db 3                                    # Single source
+rmv_db 8 7                                  # Combine NoBIAS + RMSX
+rmv_db 8 7, jaccard_threshold=0.80          # Custom threshold
+rmv_db 6 off                                # Disable filtering
+rmv_db 6 SARCIN-RICIN 0.01                  # Custom P-value
+rmv_db 7 /path/to/rmsx/data                 # Custom data path
 ```
 
 ---
 
 #### `rmv_source info [N]`
 
-Shows currently active source info, or detailed info about a specific source by ID.
+Shows currently active source info (no args) or detailed info about source N.
 
-**Implementation:** `set_source(mode='info')` → `gui._handle_source_info_command()` / `gui._print_active_source_info()`
-
-Without an ID: shows the currently active source with its status, filtering settings, and loaded PDB.
-With an ID: shows detailed info for that specific source.
+**Implementation:** `set_source(mode='info')` → `_handle_source_info_command()`
 
 ---
 
@@ -288,41 +256,65 @@ Lists all 8 available data sources with descriptions and coverage.
 
 ---
 
+#### `rmv_refresh`
+
+Force-refreshes motif data from API sources (bypasses 30-day cache).
+
+**Implementation:** `refresh_motifs()` → `gui.refresh_motifs_action()`
+
+---
+
+#### `rmv_load <PDB_ID>`
+
+**Legacy command.** Does NOT load anything — only prints a "RECOMMENDED WORKFLOW" guide directing users to `rmv_fetch` → `rmv_db` → `rmv_load_motif`.
+
+---
+
 ### Visualization
 
-#### `rmv_show <TYPE> [<INSTANCE_NO>] [padding=N]`
+#### `rmv_show <TYPE> [<INSTANCE_NO>] [, padding=N]`
 
-Highlights and colors a motif type on the loaded structure. If an instance number
-is provided, zooms to that specific instance and creates an individual PyMOL object.
-The optional `padding=N` argument expands the selection by N residues on each side
-for structural context (visualization only — stored data and summary tables are unchanged).
+Creates PyMOL objects for motif instances and renders them.
 
 **Implementation:** `show_motif()` → `_resolve_motif_type_and_instance()` → `VisualizationManager.show_motif_type(padding=N)` or `.show_motif_instance(padding=N)`
 
 **Key behavior:**
-- Uses `_resolve_motif_type_and_instance()` to handle multi-word motif names (e.g., "4-WAY JUNCTION (J4)")
+- Uses `_resolve_motif_type_and_instance()` to handle multi-word motif names (e.g., `"4-WAY JUNCTION (J4)"`)
 - Creates PyMOL objects with source suffix: `HL_ALL_S3`, `HL_1_S3`
-- Colors motif residues using `colors.py` definitions
-- Sets non-motif residues to `NON_MOTIF_COLOR` (gray80)
+- Auto-deactivates all other PyMOL objects except the base PDB and new motif objects
 - With instance number: creates separate object, zooms camera, prints residue details
-- With `padding=N`: expands each residue range ±N for the PyMOL selection
+- Supports comma-separated instance numbers: `rmv_show HL 1,3,5`
+- Includes typo detection with "Did you mean…?" suggestions
 
-**Example:**
+**Source filtering (combine mode only):**
+
+In combine mode, the last non-numeric token is checked as a source filter keyword via `_resolve_source_filter()`:
+
 ```
-rmv_show HL              # Show all hairpin loops
-rmv_show GNRA 1          # Zoom to GNRA instance #1
-rmv_show HL 3            # Zoom to hairpin loop instance #3
-rmv_show 4-WAY JUNCTION (J4)    # Multi-word motif type
-rmv_show GNRA 1 padding=5       # Instance #1 with 5 flanking residues
+rmv_show K-TURN nobias       # Only NoBIAS-unique instances
+rmv_show K-TURN shared       # Only shared instances
 ```
+
+Supported keywords: `nobias`, `rmsx`, `rms`, `fr3d`, `rfam`, `atlas`, `bgsu`, `shared`, plus full source names.
 
 ---
 
 #### `rmv_show ALL`
 
-Resets the view to show all loaded motifs on the gray backbone.
+Creates PyMOL objects for every loaded motif type.
 
-**Implementation:** `show_all()` → `VisualizationManager.show_all_motifs()`
+---
+
+#### `rmv_view <TYPE> [<INSTANCE_NO>] | all | hide | all hide | <TYPE> hide`
+
+Lightweight alternative — highlights motif residues directly on the structure **without** creating separate PyMOL objects.
+
+**Implementation:** `view_motif()` → `gui.view_motif_action()`
+
+- `rmv_view all` — colors all motif residues with unique type colors
+- `rmv_view hide` / `rmv_view all hide` — resets all coloring to gray
+- `rmv_view <TYPE> hide` — resets only that type's coloring
+- `rmv_view <TYPE> <NO>` — zooms and creates a PyMOL selection
 
 ---
 
@@ -332,155 +324,23 @@ Toggles visibility of a motif type's PyMOL objects.
 
 **Implementation:** `toggle_motif()` → `gui.toggle_motif_action()`
 
-**Example:**
-```
-rmv_toggle HL off
-rmv_toggle HL on
-```
+Accepted values: `on`/`true`/`1`/`yes`/`show` or `off`/`false`/`0`/`no`/`hide`
 
 ---
 
 #### `rmv_bg_color <COLOR>`
 
-Changes the color of non-motif residues (the "background" backbone).
-
-**Implementation:** `set_bg_color()` → `gui.set_background_color()`
-
-**Example:**
-```
-rmv_bg_color white
-rmv_bg_color lightgray
-rmv_bg_color gray80       # Default
-```
-
----
-
-#### `rmv_view <TYPE> [<INSTANCE_NO>]`
-
-Lightweight alternative to `rmv_show` — highlights and zooms to motif residues directly
-on the structure **without** creating separate PyMOL objects.
-
-**Implementation:** `view_motif()` → `gui.view_motif_action()`
-
-**Key behavior:**
-- Colors motif residues in-place on the loaded structure (no new objects)
-- With instance number: zooms camera to that instance
-- Faster than `rmv_show` for quick exploration
-- Does not interfere with existing PyMOL objects from `rmv_show`
-
-**Example:**
-```
-rmv_view HL              # Highlight all hairpin loop residues
-rmv_view HL 1            # Highlight and zoom to HL instance 1
-rmv_view GNRA 3          # Highlight and zoom to GNRA instance 3
-```
-
----
-
-### Superimposition
-
-#### `rmv_super <TYPE> [<INSTANCE_NOS>] [pdb=PDB1,PDB2] [padding=N]`
-
-Superimposes all instances of a motif type using sequence-independent alignment (`cmd.super()`).
-Automatically identifies the **medoid** (most representative instance) and aligns all others onto it.
-
-**Implementation:** `superimpose_motifs()` → `alignment.py` → `MedoidSuperimposer`
-
-**Key behavior:**
-- Computes all-vs-all pairwise RMSD matrix
-- Selects medoid as the instance with lowest average RMSD to all others
-- Creates separate PyMOL objects for each instance, colored uniquely (medoid = green)
-- Supports cross-PDB superimposition when multiple PDBs are loaded
-- Instance subset via comma-separated numbers: `rmv_super KTURN 1,3,5`
-
-**Example:**
-```
-rmv_super KTURN                 # All K-TURN instances
-rmv_super KTURN 1,3,5           # Only instances 1, 3, 5
-rmv_super KTURN pdb=1S72,4V88   # Cross-PDB
-rmv_super KTURN, padding=3      # With extended residue context
-```
-
----
-
-#### `rmv_align <TYPE> [<INSTANCE_NOS>] [pdb=PDB1,PDB2] [padding=N]`
-
-Same as `rmv_super` but uses sequence-dependent alignment (`cmd.align()`).
-Best when motif sequences are similar.
-
-**Implementation:** `align_motifs()` → `alignment.py` → `MedoidSuperimposer` with `method='align'`
-
-**Example:**
-```
-rmv_align SARCIN-RICIN           # All sarcin-ricin instances
-rmv_align SARCIN-RICIN 1,2,4     # Specific instances
-```
-
----
-
-### Base-Pair Visualization
-
-#### `rmv_pair <TYPE> <INSTANCE_NO>`
-
-Shows base-pair interactions for a specific motif instance with Leontis-Westhof (LW)
-classification labels displayed in the PyMOL viewport.
-
-**Implementation:** `show_pair()` → `pair_visualizer.py` → `PairVisualizer`
-
-**Key behavior:**
-- Identifies base pairs within the motif instance
-- Labels each pair with its LW classification (e.g., cWW, tHS, cSS)
-- Draws dashed lines between paired bases in PyMOL
-- Colors pairs by interaction type
-
-**Example:**
-```
-rmv_pair SARCIN-RICIN 1     # Show base pairs for instance 1
-rmv_pair KTURN 3             # Show base pairs for K-TURN instance 3
-```
-
----
-
-#### `rmv_pair_batch <TYPE>`
-
-Runs base-pair analysis for all instances of a motif type in batch mode.
-
-**Implementation:** `show_pair_batch()` → `pair_visualizer.py` → iterates over all instances
-
-**Example:**
-```
-rmv_pair_batch SARCIN-RICIN  # Analyze all sarcin-ricin instances
-rmv_pair_batch GNRA          # Analyze all GNRA instances
-```
-
----
-
-### Information
-
-#### `rmv_loaded`
-
-Lists all currently loaded PDB structures and their associated data sources.
-
-**Implementation:** `show_loaded()` → `gui.show_loaded_action()`
-
-**Example:**
-```
-rmv_loaded               # Show all loaded PDBs with source info
-```
+Changes the color of non-motif residues (default: `gray80`).
 
 ---
 
 #### `rmv_color <TYPE> <COLOR>`
 
-Changes the color of a specific motif type.
+Changes the color of a specific motif type. Accepts PyMOL color names or RGB float values.
 
 **Implementation:** `set_motif_color()` → `colors.set_custom_motif_color()` → re-applies via `set_motif_color_in_pymol()`
 
-**Example:**
-```
-rmv_color HL blue
-rmv_color GNRA red
-```
+Custom colors take priority over predefined colors.
 
 ---
 
@@ -488,7 +348,52 @@ rmv_color GNRA red
 
 Prints the color legend for all loaded (or default) motif types.
 
-**Implementation:** `show_colors()` → `colors.print_color_legend()`
+---
+
+### Superimposition
+
+#### `rmv_super <TYPE> [<INSTANCE_NOS>] [, <PDB_SRC1>, <PDB_SRC2>] [, padding=N]`
+
+Medoid-based structural superimposition using `cmd.super()` (sequence-independent).
+
+**Implementation:** `superimpose_motifs()` → `alignment.py` → `_run_medoid_pipeline()`
+
+**Pipeline:**
+1. Resolve motif name via alias table + fuzzy matching (exact → alias → reverse alias → substring)
+2. Collect individual instance objects (auto-create if needed via `_batch_create_instance_objects()`)
+3. Build N×N pairwise RMSD matrix using temporary copies
+4. Identify medoid (instance with minimum average RMSD)
+5. Superimpose all instances onto medoid
+6. Color each instance uniquely (cycling 15 colors), medoid = green
+7. Print formatted report with per-instance RMSD
+
+**PDB_SRC tags:** Format `<PDB>_S<N>` (e.g., `1S72_S3`). Validated with intelligent error messages.
+
+**Motif alias table (`MOTIF_ALIASES`):**
+
+| User Input | Resolves To |
+|------------|-------------|
+| KTURN, K_TURN, KINK-TURN, KINK_TURN | K-TURN |
+| CLOOP, C_LOOP | C-LOOP |
+| SARCIN, SARCINRICIN, SARCIN_RICIN | SARCIN-RICIN |
+| REVERSE-KTURN, REVERSE_KTURN, REVERSEKTURN, REVERSE_K_TURN | REVERSE-K-TURN |
+| ELOOP, E_LOOP | E-LOOP |
+| TLOOP, T_LOOP | T-LOOP |
+
+**Resolution order:** Exact match → Forward alias → Reverse alias → Substring match
+
+```
+rmv_super KTURN                       # All K-TURN instances
+rmv_super KTURN 1,3,5                 # Specific instances
+rmv_super KTURN, 1S72_S3, 4V88_S3    # Cross-PDB
+rmv_super KTURN, padding=3            # With flanking residues
+```
+
+---
+
+#### `rmv_align <TYPE> [<INSTANCE_NOS>] [, <PDB_SRC1>, <PDB_SRC2>] [, padding=N]`
+
+Same as `rmv_super` but uses `cmd.align()` (sequence-dependent). Better for closely related sequences.
 
 ---
 
@@ -499,62 +404,27 @@ Prints the color legend for all loaded (or default) motif types.
 Prints motif information to the console (no rendering).
 
 **Implementation:** `motif_summary()` → dispatches to:
-- No args: `gui.print_motif_summary()` — summary table of all types
-- TYPE only: `gui.show_motif_summary_for_type()` — instance table for one type
-- TYPE + NO: `gui.show_motif_instance_summary()` — residue details for one instance
-
-**Note:** Nucleotide columns are hidden from summary output.
-
-**Example:**
-```
-rmv_summary                   # All motif types table
-rmv_summary HL                # All HL instances
-rmv_summary SARCIN-RICIN 1    # Instance #1 details
-```
-
----
-
-#### `rmv_source info [N]`
-
-Shows the currently active source (no args) or detailed info about source N.
-
-**Implementation:** `set_source()` → `gui._handle_source_info_command()` → `_print_active_source_info()` or `_print_single_source_info()`
-
----
-
-#### `rmv_reset`
-
-Deletes all PyMOL objects and resets the plugin to default state (source, PDB, colors, filters, chain mode).
-
-**Implementation:** `reset_plugin()` → `cmd.delete('all')` + resets all `gui.*` state attributes
+- No args: `gui.print_motif_summary()` — summary table of all types with counts
+- TYPE only: `gui.show_motif_summary_for_type()` — instance table with source attribution
+- TYPE + NO: `gui.show_motif_instance_summary()` — residue-level details
 
 ---
 
 #### `rmv_chains [structure_name]`
 
-Shows chain ID diagnostic information.
+Shows chain ID diagnostic information: structure name, `cif_use_auth` value, chain ID mode, total chain count, and all chains.
 
-**Implementation:** `show_chain_diagnostics()` → reads `gui.cif_use_auth`, calls `cmd.get_chains()`
+---
 
-**Example:**
-```
-rmv_chains
-rmv_chains 1s72
-```
+#### `rmv_loaded`
 
-Output:
-```
-Structure: 1S72  |  cif_use_auth = 0 (label_asym_id)  |  Chains: 293
-Label chains:  A AA AB AC ...
-```
+Lists all loaded PDB+source combination tags (e.g., `1S72_S3`, `4V88_S7`). Suggests usage with `rmv_super`/`rmv_align`.
 
 ---
 
 #### `rmv_help`
 
-Prints the full command reference box.
-
-**Implementation:** `show_help()` → `gui.print_help()`
+Prints the full 22-command reference in box format.
 
 ---
 
@@ -568,7 +438,7 @@ Saves motif instance images **or** exports motif structures as mmCIF.
 - `ALL`: `gui.save_all_motif_images_action(representation)`
 - `TYPE`: `gui.save_motif_type_images_action(type, representation)`
 - `TYPE NO`: `gui.save_motif_instance_by_id_action(type, no, representation)`
-- `current`: `gui.save_current_view_action(filename)` — 2400×1800, 300 DPI
+- `current`: `gui.save_current_view_action(filename)` — 2400×1800, ~300 DPI
 - `ALL cif`: `gui.export_all_motif_structures_action()`
 - `TYPE cif`: `gui.export_motif_type_structures_action(type)`
 - `TYPE NO cif`: `gui.export_motif_instance_by_id_action(type, no)`
@@ -579,45 +449,34 @@ Saves motif instance images **or** exports motif structures as mmCIF.
 - Images: `motif_images/<pdb_id>/<MOTIF_TYPE>/`
 - Structures: `motif_structures/<pdb_id>/<MOTIF_TYPE>/`
 
-**mmCIF export** extracts original coordinates from the on-disk CIF file
-(not PyMOL's internal coordinates). Implemented in `structure_exporter.py` →
-`MotifStructureExporter` class.
+**mmCIF export** extracts original coordinates from the on-disk CIF file (not PyMOL's internal coordinates). Implemented in `structure_exporter.py` → `MotifStructureExporter`.
 
-**Example (image save):**
-```
-rmv_save ALL                     # All motifs, cartoon
-rmv_save ALL sticks              # All motifs, sticks
-rmv_save HL                      # All HL instances, cartoon
-rmv_save HL 3 spheres            # HL instance 3, spheres
-rmv_save current                 # Current view, auto filename
-rmv_save current my_view.png     # Current view, custom filename
-```
-
-**Example (mmCIF export):**
-```
-rmv_save ALL cif                 # All motifs as mmCIF
-rmv_save HL cif                  # All HL instances as mmCIF
-rmv_save HL 3 cif                # HL instance 3 as mmCIF
-```
+**Why not `cmd.save()`?** PyMOL may modify coordinates slightly during loading (symmetry expansion, origin shifting). The exporter reads/writes the raw CIF text directly.
 
 ---
 
 ### User Annotations
 
-#### `rmv_user <TOOL> <PDB_ID>`
+#### `rmv_user <TOOL> <PDB_ID> | list`
 
-Legacy command to load user annotations directly (before `rmv_source` was available).
+Legacy command to load user annotations directly.
 
-**Implementation:** `load_user_annotations()` → `gui.load_user_annotations_action()`
+- `rmv_user fr3d 1S72` — Load FR3D annotations
+- `rmv_user rnamotifscan 1A00` — Load RMS annotations
+- `rmv_user list` — Show available annotation files
 
-**Example:**
-```
-rmv_user fr3d 1S72
-rmv_user rnamotifscan 1A00
-rmv_user list                    # Show available annotation files
-```
+> **Preferred approach:** Use `rmv_db 5/6/7/8` + `rmv_load_motif` instead.
 
-> **Note:** Prefer using `rmv_db 5/6/7` + `rmv_load_motif` instead.
+---
+
+#### `rmv_reset`
+
+Deletes all PyMOL objects (`cmd.delete('all')`) and resets all GUI state:
+- Clears `loaded_pdb`, `loaded_pdb_id`, `current_source_mode`, `current_source_id`
+- Resets filtering to defaults (on)
+- Clears custom P-values and custom colors
+- Resets `cif_use_auth` to 1
+- Clears auth→label chain mapping and motif loader data
 
 ---
 
@@ -631,10 +490,10 @@ All providers inherit from `BaseProvider` (in `base_provider.py`):
 class BaseProvider(ABC):
     @abstractmethod
     def get_motifs(self, pdb_id: str) -> List[MotifType]: ...
-    
+
     @abstractmethod
     def get_available_pdb_ids(self) -> List[str]: ...
-    
+
     @abstractmethod
     def get_available_motif_types(self) -> List[str]: ...
 ```
@@ -652,7 +511,7 @@ class ResidueSpec:
 class MotifInstance:
     residues: List[ResidueSpec]
     annotation: str = ''    # Optional label
-    score: float = 0.0      # P-value for RMS/RMSX
+    score: float = 0.0      # P-value for RMS/RMSX/NoBIAS
 
 @dataclass
 class MotifType:
@@ -663,22 +522,21 @@ class MotifType:
 ### Source 1 — RNA 3D Atlas (Local)
 
 - **File:** `atlas_provider.py`
-- **Data:** Bundled JSON files in `motif_database/`
-- **Coverage:** 759 PDB structures
+- **Data:** Bundled JSON files in `motif_database/RNA 3D motif atlas/` (e.g., `hl_4.5.json`, `il_4.5.json`)
 - **Motif types:** HL, IL, J3, J4, J5, J6, J7
+- **Auto-discovery:** Scans for versioned JSON files at startup
 
 ### Source 2 — Rfam (Local)
 
 - **File:** `rfam_provider.py`
-- **Data:** Bundled Stockholm alignment files in `motif_database/`
-- **Coverage:** 173 PDB structures
-- **Motif types:** GNRA, UNCG, CUYG, K-TURN, T-LOOP, C-LOOP, U-TURN, SARCIN-RICIN, TANDEM-GA, etc. (19 types)
+- **Data:** Bundled Stockholm/SEED alignment files in `motif_database/Rfam motif database/`
+- **Motif types:** 19 named types (GNRA, UNCG, CUYG, K-TURN-1, K-TURN-2, pK-TURN, T-LOOP, C-LOOP, U-TURN, SARCIN-RICIN-1, SARCIN-RICIN-2, TANDEM-GA, etc.)
 
 ### Source 3 — BGSU RNA 3D Hub (Web API)
 
 - **File:** `bgsu_api_provider.py`
 - **Strategy:** Hybrid HTML scraping + CSV fallback
-  1. Scrapes `http://rna.bgsu.edu/rna3dhub/nrlist` for loop annotations
+  1. Scrapes `http://rna.bgsu.edu/rna3dhub/pdb/{PDB}/motifs` for loop annotations
   2. Falls back to CSV download if HTML parsing fails
 - **Coverage:** ~3000+ PDB structures
 - **Cache:** 30 days via `cache_manager.py`
@@ -686,37 +544,50 @@ class MotifType:
 ### Source 4 — Rfam API (Web)
 
 - **File:** `rfam_api_provider.py`
-- **Endpoint:** Rfam REST API
-- **Coverage:** All Rfam-annotated motif families
+- **Endpoint:** `https://rfam.org/motif/{RM_ID}/alignment` (Stockholm SEED format)
+- **Coverage:** 34 motif families (RM00001–RM00034)
 - **Cache:** 30 days
 
-### Sources 5-8 — User Annotations
+### Sources 5–8 — User Annotations
 
 - **File:** `user_annotations/user_provider.py` + `user_annotations/converters.py`
-- **Source 5 (FR3D):** Parses FR3D output format
-- **Source 6 (RMS):** Parses RNAMotifScan result files with P-value filtering
-- **Source 7 (RMSX):** Parses RNAMotifScanX result files with P-value filtering
-- **Source 8 (NoBIAS):** Parses NoBIAS result files with P-value filtering
+- **Source 5 (FR3D):** Parses FR3D CSV output
+- **Source 6 (RMS):** Parses RNAMotifScan tab-separated result files with P-value filtering
+- **Source 7 (RMSX):** Parses RNAMotifScanX `result_*.log` files with P-value filtering
+- **Source 8 (NoBIAS):** Parses NoBIAS `*_nobias.txt` files with P-value filtering (delegates to RMSX parser — same format)
 
-**File location:** `database/user_annotations/{fr3d,RNAMotifScan,RNAMotifScanX,NoBIAS}/`
+**File locations (default):**
+```
+database/user_annotations/
+├── fr3d/                    FR3D CSV files
+├── RNAMotifScan/            RMS (motif-type subdirectories)
+├── RNAMotifScanX/           RMSX (consensus subdirectories)
+└── NoBIAS/                  NoBIAS (flat *_nobias.txt files)
+```
 
-**RMS/RMSX directory structure:**
-```
-RNAMotifScan/
-├── c_loop/
-│   └── Res_1s72          # Result file for PDB 1S72
-├── sarcin_ricin/
-│   └── Res_1s72
-├── k_turn/
-│   └── Res_1s72
-└── ...
-```
+**Custom paths stored per-source** in `gui.user_data_paths: Dict[int, str]`.
+
+**RMSX file priority:** When multiple result files exist in a consensus directory:
+1. `result_0_100_withbs.log` (highest)
+2. `result_0_100.log`
+3. `result_0_withbs.log`
+4. `result_0.log` (lowest)
+
+**Default P-value thresholds:**
+
+| Motif | RMS | RMSX | NoBIAS |
+|-------|-----|------|--------|
+| KINK-TURN | 0.07 | 0.066 | 0.066 |
+| C-LOOP | 0.04 | 0.044 | 0.044 |
+| SARCIN-RICIN | 0.02 | 0.040 | 0.040 |
+| REVERSE KINK-TURN | 0.14 | 0.018 | 0.018 |
+| E-LOOP | 0.13 | 0.018 | 0.018 |
 
 ---
 
 ## 6. Chain ID System
 
-The plugin implements a **4-layer chain ID handling system** to ensure chain IDs are consistent between the PDB structure in PyMOL and the motif annotation data.
+The plugin implements a **4-layer chain ID handling system** to ensure consistency between PDB structures and motif annotation data.
 
 ### Layer 1 — Startup Lock (`plugin.py`)
 
@@ -742,7 +613,13 @@ When `cif_use_auth=0`, the plugin parses the CIF file `_atom_site` loop to build
 {auth_asym_id: label_asym_id}  # e.g., {'0': 'A', '9': 'B'}
 ```
 
-This is stored in `gui.auth_to_label_map` and used during motif data loading to remap residue chain IDs.
+Stored in `gui.auth_to_label_map` and used during motif data loading to remap residue chain IDs.
+
+**Algorithm:**
+1. Find CIF file in PyMOL's `fetch_path`
+2. Locate `_atom_site.auth_asym_id` and `_atom_site.label_asym_id` column indices
+3. Read data rows, extract unique (auth, label) pairs
+4. Return `{auth: label}` dict
 
 ### Layer 4 — Runtime Diagnostics (`rmv_chains`)
 
@@ -750,20 +627,20 @@ Displays current chain mode and loaded chains for verification.
 
 ### Why This Matters
 
-Motif databases (BGSU, Atlas, Rfam) use **auth_asym_id** chain IDs. When PyMOL loads with `cif_use_auth=0`, it uses **label_asym_id** as the `chain` property. Without the mapping, motif selections would target wrong chains.
+Motif databases (BGSU, Atlas, Rfam) use **auth_asym_id** chain IDs. When PyMOL loads with `cif_use_auth=0`, it uses **label_asym_id** as the `chain` property. Without the mapping, motif selections would target wrong residues/chains.
 
 ---
 
 ## 7. Multi-Source Pipeline
 
-When combining sources (e.g., `rmv_db 1 3`):
+When combining sources (e.g., `rmv_db 8 7`):
 
 ### Step 1 — Fetch
 
 Each source independently fetches motifs for the PDB:
 ```
-Atlas → [HL(35), IL(19), J3(18), ...]
-BGSU  → [HL(42), IL(23), J3(21), GNRA(15), SARCIN-RICIN(8), ...]
+NoBIAS → [K-TURN(6), SARCIN-RICIN(4), ...]
+RMSX   → [K-TURN(5), C-LOOP(3), SARCIN-RICIN(4), ...]
 ```
 
 ### Step 2 — Enrich (`homolog_enricher.py`)
@@ -773,33 +650,41 @@ Generic motif names are enriched using NR homolog representative lookup:
 Atlas HL_345 → matches BGSU GNRA_123 (same residues) → rename to GNRA
 ```
 
-Uses `nrlist_4.24_all.csv` for representative set lookup.
+Uses `nrlist_4.24_all.csv` for representative set lookup. IFE format: `PDB_ID|Model|Chain` (handles multi-chain with `+`). Primary matching by `motif_group` ID; fallback via Jaccard residue similarity (threshold 0.85). Skips generic names (HL, IL, J3–J8) for enrichment.
 
-### Step 2.5 — Source Stamping
+### Step 3 — Source Stamping
 
-Each instance is tagged with `_source_id` and `_source_label` metadata before merging. This enables the SOURCE column in instance tables and the source attribution report.
+Each instance is tagged with `_source_id` and `_source_label` metadata. This enables the SOURCE column in instance tables and the source attribution report in `rmv_summary`.
 
-### Step 2.7 — Within-Source Deduplication
+### Step 4 — Within-Source Deduplication
 
-Exact duplicates within the same source are removed. Two instances are considered duplicates if they have the same set of `(chain, residue_number)` pairs. This prevents tools like RMSX from contributing identical entries.
+Exact duplicates within the same source are removed. Two instances are considered duplicates if they have the same set of `(chain, residue_number)` pairs.
 
-### Step 3 — Cascade Merge (`cascade_merger.py`)
+### Step 5 — Cascade Merge (`cascade_merger.py`)
 
-Sources are merged right-to-left (later sources have higher priority):
-```
-merge(Atlas, BGSU) = Atlas ∪ BGSU - duplicates
-```
+Sources are merged right-to-left with Jaccard deduplication:
 
-**Deduplication:** Jaccard similarity ≥ 0.60 on residue sets = duplicate. The instance from the higher-priority (right-most) source is kept.
+**Key parameters:**
+- Default Jaccard threshold: `0.60` (60% residue overlap = duplicate)
+- Category-aware: only compares motifs within the same base category
+- `MOTIF_CANONICAL_MAP` harmonizes variant names (KTURN → K-TURN, CLOOP → C-LOOP, etc.)
+- Higher-priority source version kept on overlap
 
-### Step 4 — Store
+### Step 6 — Cross-Source Attribution
 
-Merged motifs are stored in `VisualizationManager.motif_loader.loaded_motifs` as a dict:
+`_annotate_overlap()` adds `_also_found_in` metadata for instances found in multiple sources. `_deduplicate_subsets()` performs a final pass removing subset instances (asymmetric containment).
+
+### Step 7 — Source Filter Resolution
+
+In combine mode, `_resolve_source_filter()` (`gui.py`) categorizes merged instances as **unique** (single `_source_label`) or **shared** (`_also_found_in` not empty). Keywords (nobias, rmsx, shared, etc.) resolve to lists of instance numbers for per-source rendering.
+
+### Storage
+
+Merged motifs stored in `VisualizationManager.motif_loader.loaded_motifs`:
 ```python
 {
-    'HL': {'count': 42, 'motif_details': [...], 'structure_name': '1s72', ...},
-    'GNRA': {'count': 15, 'motif_details': [...], ...},
-    ...
+    'K-TURN': {'count': 8, 'motif_details': [...], 'structure_name': '1s72', ...},
+    'SARCIN-RICIN': {'count': 4, 'motif_details': [...], ...},
 }
 ```
 
@@ -820,17 +705,19 @@ MOTIF_COLORS = {
 }
 ```
 
-### Fallback Color
+90+ entries including underscore and hyphen aliases (e.g., both `SARCIN_RICIN` and `SARCIN-RICIN`).
 
-Any motif type not in `MOTIF_COLORS` gets `DEFAULT_COLOR = (1.0, 0.5, 0.0)` (bright orange).
+### Color Priority
 
-### Custom Colors
+1. **Custom** — user-set via `rmv_color` (stored in `CUSTOM_COLORS` dict)
+2. **Predefined** — from `MOTIF_COLORS`
+3. **Dynamic pool** — 20 visually distinct colors assigned at runtime (`_DYNAMIC_COLOR_POOL`)
+4. **Hash** — MD5 hash-based deterministic color when pool exhausted
 
-Users can override colors at runtime via `rmv_color`. Custom colors are stored in `CUSTOM_COLORS` dict and take precedence over `MOTIF_COLORS`.
+### Constants
 
-### Background Color
-
-Non-motif residues are colored `NON_MOTIF_COLOR = 'gray80'`. Changeable via `rmv_bg_color`.
+- `NON_MOTIF_COLOR = 'gray80'` — background/non-motif residue color
+- `DEFAULT_COLOR = (1.0, 0.5, 0.0)` — bright orange for unknown types
 
 ---
 
@@ -844,42 +731,32 @@ The `ImageSaver` class handles all PNG export:
   - Default size: 800×600
   - Representations: cartoon, sticks, spheres, ribbon, lines, licorice, surface, cartoon+sticks
 - **Current view:** Captures the PyMOL viewport as-is
-  - Size: 2400×1800, 300 DPI (high-res)
+  - Size: 2400×1800, ~300 DPI
 
 ### Structure Exporter (`structure_exporter.py`)
 
 The `MotifStructureExporter` class exports motif instances as standalone mmCIF files:
 
-- Locates the **original CIF file** on disk via PyMOL's `fetch_path`
-- Parses `_atom_site` column headers to find `auth_asym_id` and `auth_seq_id` indices
-- Filters atom records to only those matching the motif's (chain, residue) pairs
-- Copies all metadata blocks (`_cell`, `_symmetry`, `_entity`, etc.) from source
-- Writes a self-contained `.cif` file loadable in PyMOL or any molecular viewer
-
-**Why not use PyMOL's `cmd.save()`?** PyMOL may modify atomic coordinates slightly
-during loading (symmetry expansion, origin shifting). The exporter bypasses PyMOL
-entirely and reads/writes the raw CIF text.
+1. Locates the **original CIF file** on disk via PyMOL's `fetch_path`
+2. Parses `_atom_site` column headers to find `auth_asym_id` and `auth_seq_id` indices
+3. Filters atom records to only those matching the motif's (chain, residue) pairs
+4. Copies all metadata blocks (`_cell`, `_symmetry`, `_entity`, etc.) from source
+5. Writes a self-contained `.cif` file loadable in PyMOL or any molecular viewer
 
 ### Output Folders
 
-**Images** (`motif_images/`):
 ```
 motif_images/
 └── <pdb_id>/
     ├── <MOTIF_TYPE>/
-    │   ├── <TYPE>_instance_1.png
-    │   ├── <TYPE>_instance_2.png
+    │   ├── <TYPE>-<NO>-<CHAIN>_<RESIDUES>.png
     │   └── ...
-    └── current_view_<timestamp>.png
-```
+    └── ...
 
-**Structures** (`motif_structures/`):
-```
 motif_structures/
 └── <pdb_id>/
     ├── <MOTIF_TYPE>/
-    │   ├── <TYPE>-1-<chain>-<residues>.cif
-    │   ├── <TYPE>-2-<chain>-<residues>.cif
+    │   ├── <TYPE>-<NO>-<CHAIN>_<RESIDUES>.cif
     │   └── ...
     └── ...
 ```
@@ -891,13 +768,10 @@ motif_structures/
 ### Cache Manager (`cache_manager.py`)
 
 - **Location:** `~/.rsmviewer_cache/`
-- **Expiry:** 30 days (configurable via `CachePolicy.cache_days`)
+- **Expiry:** 30 days
+- **Version:** `CACHE_VERSION = "2.1"` — auto-invalidates old caches
 - **Scope:** API responses from BGSU (source 3) and Rfam API (source 4)
-- **Bypass:** `rmv_refresh` sets `FreshnessPolicy.FORCE_REFRESH`
-
-### Cache Key Format
-
-Files are stored with a hash of the PDB ID + source identifier.
+- **Bypass:** `rmv_refresh` clears cache and re-fetches
 
 ---
 
@@ -917,30 +791,17 @@ class MyDBProvider(BaseProvider):
         # Fetch/parse motif data for pdb_id
         # Return list of MotifType objects
         ...
-    
+
     def get_available_pdb_ids(self) -> list:
         return [...]
-    
+
     def get_available_motif_types(self) -> list:
         return [...]
 ```
 
 ### Step 2 — Register in SOURCE_ID_MAP
 
-In `database/config.py`, add:
-
-```python
-SOURCE_ID_MAP[9] = {
-    'name': 'MyDB',
-    'type': 'web',       # or 'local' or 'user'
-    'category': 'ONLINE SOURCES',
-    'subtype': 'mydb',
-    'description': 'My custom database',
-    'coverage': 'N PDB structures',
-    'mode': 'web',
-    'command': 'rmv_db 8',
-}
-```
+In `database/config.py`, add entry 9 with `name`, `type`, `category`, `subtype`, `description`, `coverage`, `mode`, and `command` fields.
 
 ### Step 3 — Wire into Source Selector
 
@@ -969,13 +830,13 @@ The central state object. Key attributes:
 | `cif_use_auth` | `int` | 1 = auth_asym_id, 0 = label_asym_id |
 | `auth_to_label_map` | `dict` | {auth_chain: label_chain} mapping |
 | `current_source_mode` | `str` | 'local', 'web', 'user', 'combine' |
-| `current_source_id` | `int\|str` | Numeric source ID (1-8) or combined (e.g., '1_3') |
+| `current_source_id` | `int\|str` | Numeric source ID (1–8) or combined (e.g., '8_7') |
 | `combined_source_ids` | `list` | Source IDs when combining |
 | `user_rms_filtering_enabled` | `bool` | RMS P-value filtering on/off |
 | `user_rmsx_filtering_enabled` | `bool` | RMSX P-value filtering on/off |
+| `user_nobias_filtering_enabled` | `bool` | NoBIAS P-value filtering on/off |
 | `user_rms_custom_pvalues` | `dict` | {motif_name: p_value} overrides |
 | `user_rmsx_custom_pvalues` | `dict` | {motif_name: p_value} overrides |
-| `user_nobias_filtering_enabled` | `bool` | NoBIAS P-value filtering on/off |
 | `user_nobias_custom_pvalues` | `dict` | {motif_name: p_value} overrides |
 | `user_data_paths` | `dict` | Per-source custom data paths: {source_id: path_str} |
 | `viz_manager` | `VisualizationManager` | Manages loading + rendering |
@@ -990,16 +851,12 @@ Coordinates structure loading, motif loading, and visualization:
 | `show_motif_instance(type, no, padding=0)` | Render + zoom to specific instance |
 | `show_all_motifs()` | Reset to default colored view |
 | `get_structure_info()` | Returns loaded PDB info + motif counts |
+| `_deactivate_other_objects(keep_active)` | Auto-deactivate PyMOL objects except those in `keep_active` |
+| `_format_source_label(metadata)` | Format `_source_label` + `_also_found_in` for display |
 
 ### `_build_auth_label_chain_mapping(pdb_id)` (`gui.py`)
 
 Parses CIF file `_atom_site` loop to extract auth→label chain mapping. Used when `cif_use_auth=0`.
-
-**Algorithm:**
-1. Find CIF file in PyMOL's `fetch_path`
-2. Locate `_atom_site.auth_asym_id` and `_atom_site.label_asym_id` column indices
-3. Read data rows, extract unique (auth, label) pairs
-4. Return `{auth: label}` dict
 
 ### `_resolve_motif_type_and_instance(full_arg, instance_arg)`
 
@@ -1008,25 +865,20 @@ Handles multi-word motif type names (e.g., "4-WAY JUNCTION (J4) 1"):
 2. Tries splitting the last token as an instance number
 3. Returns `(motif_type, instance_no_or_None)`
 
+### `_resolve_source_filter(keyword, combined_source_ids)`
+
+In combine mode, resolves keywords like `nobias`, `rmsx`, `shared` to lists of instance numbers matching that source or overlap category.
+
 ---
 
 ## Conventions
 
 - **PDB IDs** are stored uppercase (`loaded_pdb_id`) but PyMOL object names are lowercase (`loaded_pdb`)
-- **Source suffixes** (e.g., `_S3`) are appended to PyMOL object names to distinguish sources
-- **Motif type names** are always uppercase internally (e.g., `HL`, `GNRA`, `SARCIN-RICIN`)
-- **Colors** use both underscore and hyphen aliases (e.g., `SARCIN_RICIN_1` and `SARCIN-RICIN-1`)
+- **Source suffixes** appended to PyMOL object names: `_S3` (single), `_S_8_7` (combined)
+- **Motif type names** are uppercase internally (e.g., `HL`, `GNRA`, `SARCIN-RICIN`)
+- **Color aliases** cover both underscore and hyphen variants (e.g., `SARCIN_RICIN` and `SARCIN-RICIN`)
 - **Chain ID convention** defaults to `auth_asym_id` (cif_use_auth=1)
 
 ---
 
-## See Also
-
-- **[TUTORIAL.md](TUTORIAL.md)** — Step-by-step user guide
-- **[README.md](README.md)** — Overview and quick start
-- **[COMBINE_GUIDE.md](COMBINE_GUIDE.md)** — Detailed multi-source combine pipeline walkthrough with code snippets
-- **[feature_documentations/](feature_documentations/)** — Detailed per-feature documentation
-
----
-
-*RSMViewer — CBB LAB @Rakib Hasan Rahad*
+*RSMViewer v1.0.0 — CBB LAB KU @Rakib Hasan Rahad*

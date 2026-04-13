@@ -51,7 +51,7 @@ SOURCE_ID_MAP: Dict[int, Dict] = {
         'category': 'ONLINE SOURCES',
         'subtype': 'rfam_api',
         'description': 'Rfam API (online, requires internet)',
-        'coverage': 'All Rfam motifs',
+        'coverage': 'All 34 Rfam named motifs',
         'mode': 'web',
         'command': 'rmv_db 4',
     },
