@@ -899,6 +899,7 @@ rmv_view hide                     # Same as rmv_view all hide
 | **Super** | `rmv_super <TYPE>` | Superimpose instances (medoid, sequence-independent) |
 | | `rmv_super <TYPE> <N1>,<N2>` | Superimpose specific instances |
 | | `rmv_super <TYPE>, padding=N` | With expanded context |
+| | `rmv_super <TYPE>, <PDB_SRC1>, <PDB_SRC2>` | Cross-PDB superimposition |
 | **Align** | `rmv_align <TYPE>` | Sequence-based alignment (medoid) |
 | **Save** | `rmv_save ALL` | Save all motif images |
 | | `rmv_save <TYPE> <N> sticks` | Save instance with representation |

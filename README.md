@@ -63,6 +63,16 @@ Run `rmv_help` at any time to see all available commands.
 ![Step 4](images/4.png)
 ---
 
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [README.md](README.md) | Overview, installation, quick start, and complete command reference |
+| [TUTORIAL.md](TUTORIAL.md) | Step-by-step tutorial with examples for every feature |
+| [DEVELOPER.md](DEVELOPER.md) | Technical reference — architecture, data flow, and implementation details |
+
+---
+
 ## Quick Start
 
 ### 1. See All Available Commands
@@ -120,8 +130,18 @@ rmv_show K-TURN shared   # Show only instances found in both sources
 ### 6. Structural Superimposition
 
 ```
-rmv_super KTURN          # Medoid-based superimposition of all K-TURN instances
-rmv_super KTURN 1,3,5    # Superimpose specific instances only
+rmv_super KTURN                       # Medoid-based superimposition of all K-TURN instances
+rmv_super KTURN 1,3,5                 # Superimpose specific instances only
+rmv_super KTURN, padding=3            # With ±3 flanking residues
+```
+
+**Cross-PDB superimposition:**
+
+```
+rmv_fetch 1S72 && rmv_db 3 && rmv_load_motif
+rmv_fetch 4V88 && rmv_load_motif
+rmv_loaded                            # See tags: 1S72_S3, 4V88_S3
+rmv_super KTURN, 1S72_S3, 4V88_S3    # Superimpose across both PDBs
 ```
 
 ### 7. Export Images & Structures
