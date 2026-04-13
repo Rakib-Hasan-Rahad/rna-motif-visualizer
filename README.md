@@ -10,15 +10,15 @@
 
 ## Overview
 
-RSMViewer is a PyMOL plugin designed for structural biologists and computational RNA researchers. It automates the retrieval, standardization, visualization, and comparative analysis of RNA structural motifs. The plugin integrates eight data sources — BGSU RNA 3D Motif Atlas, Rfam, BGSU RNA 3D Hub API, Rfam API, FR3D, RNAMotifScan (RMS), RNAMotifScanX (RMSX), and NoBIAS — into a unified framework that standardizes heterogeneous annotations across formats, chain identifiers, and naming conventions, enabling automated visualization and comparative analysis within PyMOL.
+RSMViewer is a PyMOL plugin designed for structural biologists and computational RNA researchers. It automates the retrieval, standardization, visualization, and comparative analysis of RNA structural motifs. The plugin integrates multiple sources, including: BGSU RNA 3D Motif Atlas, Rfam, FR3D, RNAMotifScan (RMS), RNAMotifScanX (RMSX), and NoBIAS into a unified framework that standardizes heterogeneous motif annotations across formats, chain identifiers, and naming conventions, enabling automated visualization and comparative analysis within PyMOL.
 
 **Key capabilities:**
 
-- **Unified annotation retrieval** from 8 heterogeneous sources (4 curated, 4 user-provided)
+- **Unified annotation retrieval** from 8 heterogeneous sources (2 locally integrated, 2 web API, 4 supporting annotation tool formats)
 - **Automatic standardization** — chain ID harmonization (auth_asym_id ↔ label_asym_id), canonical motif naming, homolog-based enrichment, and P-value filtering
 - **Multi-source cascade merge** with category-aware Jaccard deduplication and source attribution
 - **Medoid-based structural superimposition** across single or multiple PDB structures
-- **Batch export** of motif instances as high-resolution PNG images or standalone mmCIF files with original coordinates
+- **Batch export** of motif instances as high-resolution PNG images or  mmCIF files with original coordinates
 
 ---
 
@@ -55,7 +55,10 @@ After restarting PyMOL, you should see the welcome banner:
 ```
 
 Run `rmv_help` at any time to see all available commands.
-
+![Step 1](images/1.jpg)
+![Step 2](images/2.jpg)
+![Step 3](images/3.jpg)
+![Step 4](images/4.jpg)
 ---
 
 ## Quick Start
