@@ -66,7 +66,7 @@ def __init_plugin__(app):
     print("\u2514" + " "*78 + "\u2518")
     print("="*80)
     print("\n\U0001f4ca AVAILABLE DATA SOURCES:")
-    print("   \u2022 Local:       RNA 3D Atlas [1], Rfam [2] (offline)")
+    print("   \u2022 Local:       RNA 3D Motif Atlas [1], Rfam [2] (offline)")
     print("   \u2022 Online:      BGSU RNA 3D Hub [3], Rfam API [4]")
     print("   \u2022 Annotations: FR3D [5], RNAMotifScan [6], RNAMotifScanX [7], NoBIAS [8]")
     print("\n\u26a1 QUICK START:")

@@ -8,7 +8,7 @@ This module provides:
 - VisualizationManager: Coordinates the complete visualization workflow
 
 The loader now uses the database registry to support multiple databases
-(RNA 3D Atlas, Rfam, etc.) with a unified interface.
+(RNA 3D Motif Atlas, Rfam, etc.) with a unified interface.
 
 Author: CBB LAB @Rakib Hasan Rahad
 Version: 1.0.0

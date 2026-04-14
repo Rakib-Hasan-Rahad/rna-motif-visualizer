@@ -260,7 +260,7 @@ def initialize_registry(motif_database_path: str, enable_api: bool = True) -> Da
     # LOCAL PROVIDERS (bundled data, fast)
     # ========================================
     
-    # Try to register RNA 3D Atlas provider (local)
+    # Try to register RNA 3D Motif Atlas provider (local)
     atlas_path = db_path / 'RNA 3D motif atlas'
     if atlas_path.exists():
         atlas_provider = RNA3DAtlasProvider(str(atlas_path))

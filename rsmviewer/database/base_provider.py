@@ -9,7 +9,7 @@ This module provides:
 - DatabaseInfo: Metadata about a database provider
 - BaseProvider: Abstract base class that all database providers must implement
 
-All database providers (RNA 3D Atlas, Rfam, etc.) must inherit from BaseProvider
+All database providers (RNA 3D Motif Atlas, Rfam, etc.) must inherit from BaseProvider
 and implement the required methods to ensure consistent behavior across the plugin.
 
 Author: Structural Biology Lab
@@ -61,7 +61,7 @@ class ResidueSpec:
     @classmethod
     def from_atlas_spec(cls, spec: str) -> Optional['ResidueSpec']:
         """
-        Parse RNA 3D Atlas residue specification.
+        Parse RNA 3D Motif Atlas residue specification.
         
         Format: PDB|Model|Chain|Nucleotide|ResNum[|insertion_code][|extra]
         Example: 4V9F|1|A|G|303
@@ -166,7 +166,7 @@ class MotifType:
         name: Human-readable name
         description: Detailed description
         instances: List of all instances of this motif type
-        source: Database source (e.g., 'RNA 3D Atlas', 'Rfam')
+        source: Database source (e.g., 'RNA 3D Motif Atlas', 'Rfam')
         metadata: Additional type-level metadata
     """
     type_id: str
@@ -215,7 +215,7 @@ class BaseProvider(ABC):
     """
     Abstract base class for all motif database providers.
     
-    All database implementations (RNA 3D Atlas, Rfam, custom, API-based)
+    All database implementations (RNA 3D Motif Atlas, Rfam, custom, API-based)
     must inherit from this class and implement all abstract methods.
     
     This ensures consistent behavior across the plugin regardless of

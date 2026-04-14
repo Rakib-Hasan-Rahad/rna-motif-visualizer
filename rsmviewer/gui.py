@@ -1610,7 +1610,7 @@ class MotifVisualizerGUI:
             print("="*80)
             print("""
     Basic Usage:
-      rmv_db 1                         Select RNA 3D Atlas
+      rmv_db 1                         Select RNA 3D Motif Atlas
       rmv_db 3                         Select BGSU RNA 3D Hub API
       rmv_db 6                         Select RNAMotifScan (RMS)
     
@@ -2805,7 +2805,7 @@ class MotifVisualizerGUI:
             self.current_web_source = None
             self.current_user_tool = None
             self.set_source_mode('local')
-            self.logger.info("Using local sources (RNA 3D Atlas + Rfam database)")
+            self.logger.info("Using local sources (RNA 3D Motif Atlas + Rfam database)")
             return
         
         # For specific local sources
@@ -2815,7 +2815,7 @@ class MotifVisualizerGUI:
             self.current_web_source = None
             self.current_user_tool = None
             self.set_source_mode('local')
-            self.logger.success("Source set to local RNA 3D Atlas")
+            self.logger.success("Source set to local RNA 3D Motif Atlas")
         elif source_name == 'rfam':
             self.current_source_mode = 'local'
             self.current_local_source = 'rfam'
@@ -2868,7 +2868,7 @@ class MotifVisualizerGUI:
             self.logger.error("Usage: rmv_db combine <ID1> <ID2> [<ID3> ...]")
             self.logger.error("Example: rmv_db combine 1 3    (combine Atlas + BGSU)")
             self.logger.error("Valid source IDs:")
-            self.logger.error("  1 = RNA 3D Atlas (Local)")
+            self.logger.error("  1 = RNA 3D Motif Atlas (Local)")
             self.logger.error("  2 = Rfam (Local)")
             self.logger.error("  3 = BGSU RNA 3D Hub (Online)")
             self.logger.error("  4 = Rfam API (Online)")
@@ -3026,7 +3026,7 @@ class MotifVisualizerGUI:
                 print(f"  Source: [2] Rfam")
                 print(f"  Type: Local (offline) — 173 PDB structures")
             else:
-                print(f"  Source: [1] RNA 3D Atlas + [2] Rfam")
+                print(f"  Source: [1] RNA 3D Motif Atlas + [2] Rfam")
                 print(f"  Type: Local (offline)")
             
         elif self.current_source_mode == 'web':
@@ -3063,7 +3063,7 @@ class MotifVisualizerGUI:
         print("     Step 4: rmv_load_motif            # Fetch motif data")
         print("-"*70)
         print("  📋 AVAILABLE SOURCES:")
-        print("     [1] RNA 3D Atlas   [2] Rfam          (offline)")
+        print("     [1] RNA 3D Motif Atlas   [2] Rfam          (offline)")
         print("     [3] BGSU API       [4] Rfam API      (online)")
         print("     [5] FR3D           [6] RMS   [7] RMSX  [8] NoBIAS (user annotations)")
         print("")
@@ -3416,7 +3416,7 @@ def initialize_gui():
         """PyMOL command: Select motif data source by ID number.
         
         Usage:
-            rmv_db 1                  - RNA 3D Atlas (Local)
+            rmv_db 1                  - RNA 3D Motif Atlas (Local)
             rmv_db 2                  - Rfam (Local)
             rmv_db 3                  - BGSU RNA 3D Hub (Online)
             rmv_db 4                  - Rfam API (Online)

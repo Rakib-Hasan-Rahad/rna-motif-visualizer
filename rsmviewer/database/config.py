@@ -16,7 +16,7 @@ from typing import List, Optional, Dict
 # Source ID mapping - centralized registry for all sources
 SOURCE_ID_MAP: Dict[int, Dict] = {
     1: {
-        'name': 'RNA 3D Atlas',
+        'name': 'RNA 3D Motif Atlas',
         'type': 'local',
         'category': 'LOCAL SOURCES',
         'subtype': 'atlas',
@@ -150,7 +150,7 @@ class PluginConfig:
     specific_source: Optional[str] = None  # Track specific source if user explicitly selected one
     source_priority: List[str] = field(default_factory=lambda: [
         "bgsu_api",   # BGSU RNA 3D Hub API (default - ~3000+ PDBs)
-        "atlas",      # Local RNA 3D Atlas (bundled)
+        "atlas",      # Local RNA 3D Motif Atlas (bundled)
         "rfam",       # Local Rfam (bundled)
         "rfam_api",   # Rfam API
     ])

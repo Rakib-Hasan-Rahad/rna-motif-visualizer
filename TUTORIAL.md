@@ -11,7 +11,7 @@ A complete step-by-step guide for using the RSMViewer PyMOL plugin.
 3. [Exploring Motifs](#3-exploring-motifs)
 4. [Working with Data Sources](#4-working-with-data-sources)
 5. [Multi-Source Comparison](#5-multi-source-comparison)
-6. [User Annotations (FR3D / RMS / RMSX / NoBIAS)](#6-user-annotations-fr3d--rms--rmsx--nobias)
+6. [User Annotations (FR3D / RMS / RMSX)](#6-user-annotations-fr3d--rms--rmsx)
 7. [Customizing Colors](#7-customizing-colors)
 8. [Saving Images](#8-saving-images)
 9. [Exporting Motif Structures as mmCIF](#9-exporting-motif-structures-as-mmcif)
@@ -91,14 +91,13 @@ This selects BGSU RNA 3D Hub API — the most comprehensive source with ~3000+ s
 
 | ID | Source | Type | Coverage |
 |----|--------|------|----------|
-| 1 | RNA 3D Atlas | Local (offline) | 7 motif types (HL, IL, J3–J7) |
+| 1 | RNA 3D Motif Atlas | Local (offline) | 7 motif types (HL, IL, J3–J7) |
 | 2 | Rfam | Local (offline) | 19 named motifs |
 | 3 | **BGSU RNA 3D Hub** | Online API | **~3000+ PDBs** |
 | 4 | Rfam API | Online API | 34 motif families |
 | 5 | FR3D | User annotations | Custom |
 | 6 | RNAMotifScan (RMS) | User annotations | Custom (P-value filtering) |
 | 7 | RNAMotifScanX (RMSX) | User annotations | Custom (P-value filtering) |
-| 8 | NoBIAS | User annotations | Custom (P-value filtering) |
 
 Run `rmv_sources` to see detailed information about each source.
 
@@ -264,7 +263,7 @@ rmv_toggle HL on         # Show them again
 Sources 1 and 2 are bundled with the plugin:
 
 ```
-rmv_db 1               # RNA 3D Atlas — 7 motif types: HL, IL, J3–J7
+rmv_db 1               # RNA 3D Motif Atlas — 7 motif types: HL, IL, J3–J7
 rmv_load_motif
 
 rmv_db 2               # Rfam — 19 named motifs: GNRA, UNCG, K-turn, T-loop, C-loop, etc.
@@ -304,7 +303,7 @@ rmv_load_motif         # Fetch from Rfam
 ### Check Source Information
 
 ```
-rmv_sources            # List all 8 sources, their types, and coverage
+rmv_sources            # List all 7 sources, their types, and coverage
 rmv_source info 3      # Detailed information about BGSU source
 rmv_source info        # Show currently active source
 ```
@@ -335,7 +334,7 @@ Combine data from multiple sources. The plugin merges results with smart dedupli
 
 ```
 rmv_fetch 1S72
-rmv_db 8 7             # Combine NoBIAS [8] + RMSX [7]  (left = highest priority)
+rmv_db 6 7             # Combine RMS [6] + RMSX [7]  (left = highest priority)
 rmv_load_motif         # Fetches from both → deduplicates → merged
 rmv_summary            # Unified summary from both sources
 ```
@@ -362,15 +361,15 @@ rmv_summary
 Sources listed first have **highest priority**:
 
 ```
-rmv_db 8 7             # NoBIAS (higher priority) + RMSX (lower priority)
+rmv_db 6 7             # RMS (higher priority) + RMSX (lower priority)
 rmv_db 1 3 4           # Atlas (highest) + BGSU + Rfam API (lowest)
 ```
 
 ### Custom Jaccard Threshold
 
 ```
-rmv_db 8 7, jaccard_threshold=0.80    # 80% overlap required for deduplication
-rmv_db 8 7, jaccard_threshold=40      # Values >1.0 treated as percentages
+rmv_db 6 7, jaccard_threshold=0.80    # 80% overlap required for deduplication
+rmv_db 6 7, jaccard_threshold=40      # Values >1.0 treated as percentages
 ```
 
 ### Source Filtering (Combine Mode)
@@ -379,28 +378,28 @@ After combining sources, use **source filter keywords** with `rmv_show` to rende
 
 ```
 rmv_fetch 1S72
-rmv_db 8 /path/to/nobias/output       # Set NoBIAS data path
+rmv_db 6 ~/my_rms_data                # Set RMS data path
 rmv_db 7 /path/to/rmsx/output         # Set RMSX data path
-rmv_db 8 7                            # Combine NoBIAS (priority) + RMSX
+rmv_db 6 7                            # Combine RMS (priority) + RMSX
 rmv_load_motif
 
 rmv_summary K-TURN                    # View attribution report (unique/shared)
 
-rmv_show K-TURN nobias                # Only NoBIAS-unique K-TURN instances
+rmv_show K-TURN rms                   # Only RMS-unique K-TURN instances
 rmv_show K-TURN rmsx                  # Only RMSX-unique K-TURN instances
 rmv_show K-TURN shared                # Only instances found in both sources
 rmv_show K-TURN                       # All K-TURN instances (no filter)
 ```
 
-Supported keywords: `nobias`, `rmsx`, `rms`, `fr3d`, `rfam`, `atlas`, `bgsu`, `shared`.
+Supported keywords: `rmsx`, `rms`, `fr3d`, `rfam`, `atlas`, `bgsu`, `shared`.
 
 > **Tip:** After running `rmv_summary <TYPE>` in combine mode, the Next Steps section automatically suggests source filter commands for the active sources.
 
 ---
 
-## 6. User Annotations (FR3D / RMS / RMSX / NoBIAS)
+## 6. User Annotations (FR3D / RMS / RMSX)
 
-Use your own motif annotation files from FR3D, RNAMotifScan (RMS), RNAMotifScanX (RMSX), or NoBIAS.
+Use your own motif annotation files from FR3D, RNAMotifScan (RMS), or RNAMotifScanX (RMSX).
 
 ### Directory Setup
 
@@ -426,11 +425,9 @@ rsmviewer/database/user_annotations/
 │   │   └── result_0_100_withbs.log
 │   └── sarcin-ricin_consensus/
 │       └── result_0_100_withbs.log
-└── NoBIAS/                  # NoBIAS files (flat, named <pdb>_<motif>_nobias.txt)
-    └── 1s72_k-turn_nobias.txt
 ```
 
-**RMSX and NoBIAS file format** (same tab-separated format):
+**RMSX file format** (tab-separated):
 ```
 #fragment_ID	aligned_regions	alignment_score	P-value
 1S72_0:75-85_89-98_58-60	0:'0'77-4:'0'81,...	167	0.00639525
@@ -449,9 +446,6 @@ rmv_load_motif
 
 rmv_db 7               # RNAMotifScanX (RMSX)
 rmv_load_motif
-
-rmv_db 8               # NoBIAS
-rmv_load_motif
 ```
 
 ### Custom Data Paths (Per-Source)
@@ -462,24 +456,23 @@ You can specify a custom directory for each annotation source independently. Eac
 rmv_db 5 /path/to/fr3d/data       # FR3D with custom directory
 rmv_db 6 ~/my_rms_data            # RMS with home-relative path
 rmv_db 7 /path/to/rmsx/data       # RMSX with custom directory
-rmv_db 8 /data/nobias_output      # NoBIAS with custom directory
 ```
 
-> **Per-source paths:** Setting a custom path for source 7 does **not** overwrite the path for source 8. Each source keeps its own path independently. This is important when combining sources with different custom directories.
+> **Per-source paths:** Setting a custom path for one source does **not** overwrite the path for another. Each source keeps its own path independently.
 
-### P-Value Filtering (RMS / RMSX / NoBIAS)
+### P-Value Filtering (RMS / RMSX)
 
-RNAMotifScan, RNAMotifScanX, and NoBIAS include P-values in their output. The plugin uses these to filter results.
+RNAMotifScan and RNAMotifScanX include P-values in their output. The plugin uses these to filter results.
 
 **Default thresholds:**
 
-| Motif | RMS | RMSX | NoBIAS |
-|-------|-----|------|--------|
-| KINK-TURN | 0.07 | 0.066 | 0.066 |
-| C-LOOP | 0.04 | 0.044 | 0.044 |
-| SARCIN-RICIN | 0.02 | 0.040 | 0.040 |
-| REVERSE KINK-TURN | 0.14 | 0.018 | 0.018 |
-| E-LOOP | 0.13 | 0.018 | 0.018 |
+| Motif | RMS | RMSX |
+|-------|-----|------|
+| KINK-TURN | 0.07 | 0.066 |
+| C-LOOP | 0.04 | 0.044 |
+| SARCIN-RICIN | 0.02 | 0.040 |
+| REVERSE KINK-TURN | 0.14 | 0.018 |
+| E-LOOP | 0.13 | 0.018 |
 
 **Control filtering:**
 
@@ -487,17 +480,14 @@ RNAMotifScan, RNAMotifScanX, and NoBIAS include P-values in their output. The pl
 # Turn filtering off (show ALL results including high P-values)
 rmv_db 6 off
 rmv_db 7 off
-rmv_db 8 off
 
 # Turn filtering back on (use default thresholds)
 rmv_db 6 on
 rmv_db 7 on
-rmv_db 8 on
 
 # Set custom P-value thresholds for specific motif types
 rmv_db 6 SARCIN-RICIN 0.01
 rmv_db 7 C-LOOP 0.05
-rmv_db 8 KINK-TURN 0.02
 ```
 
 When filtering is on, only motif instances with P-value ≤ threshold are shown.
@@ -742,7 +732,7 @@ PDB/CIF files contain two types of chain identifiers:
 ### When to Use Label Mode
 
 Use `cif_use_auth=0` when:
-- Your user annotations (FR3D/RMS/RMSX/NoBIAS) use label chain IDs
+- Your user annotations (FR3D/RMS/RMSX) use label chain IDs
 - You need label_asym_id chains for your analysis
 - Your PDB has unusual auth chain IDs that conflict with annotation tools
 
@@ -874,9 +864,9 @@ rmv_view hide                     # Same as rmv_view all hide
 | **Load** | `rmv_fetch <PDB>` | Download and load structure |
 | | `rmv_fetch /path/to/file.cif` | Load local PDB/mmCIF file |
 | **Sources** | `rmv_sources` | List all data sources |
-| | `rmv_db <N>` | Select data source (1–8) |
+| | `rmv_db <N>` | Select data source (1–7) |
 | | `rmv_db <N1> <N2>` | Combine multiple sources |
-| | `rmv_db <N> /path` | Set custom data path (5–8) |
+| | `rmv_db <N> /path` | Set custom data path (5–7) |
 | | `rmv_source info` | Show active source info |
 | **Motifs** | `rmv_load_motif` | Fetch motif data |
 | | `rmv_refresh` | Force API cache refresh |
@@ -888,7 +878,7 @@ rmv_view hide                     # Same as rmv_view all hide
 | | `rmv_show <TYPE> <N1>,<N2>` | Render multiple specific instances |
 | | `rmv_show <TYPE>, padding=N` | Expand view ±N residues |
 | | `rmv_show ALL` | Show all motif types with objects |
-| **Filter** | `rmv_show <TYPE> nobias` | Show source-specific instances (combine) |
+| **Filter** | `rmv_show <TYPE> rms` | Show source-specific instances (combine) |
 | | `rmv_show <TYPE> shared` | Show shared instances (combine) |
 | **View** | `rmv_view all` | Highlight all motif regions |
 | | `rmv_view <TYPE>` | Highlight a motif type |
@@ -914,8 +904,8 @@ rmv_view hide                     # Same as rmv_view all hide
 | **Color** | `rmv_color <TYPE> <COLOR>` | Change motif color |
 | | `rmv_colors` | View color legend |
 | | `rmv_bg_color <COLOR>` | Change backbone color |
-| **P-value** | `rmv_db <N> off` | Disable filtering (6–8) |
-| | `rmv_db <N> on` | Enable filtering (6–8) |
+| **P-value** | `rmv_db <N> off` | Disable filtering (6–7) |
+| | `rmv_db <N> on` | Enable filtering (6–7) |
 | | `rmv_db <N> <MOTIF> <PVAL>` | Custom P-value threshold |
 | **Toggle** | `rmv_toggle <TYPE> on/off` | Toggle visibility |
 | **Reset** | `rmv_reset` | Delete all objects & reset plugin |

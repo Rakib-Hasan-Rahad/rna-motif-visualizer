@@ -33,7 +33,7 @@ PyMOL
 ├── image_saver.py         PNG export with 8 representations
 ├── structure_exporter.py  mmCIF export (original coordinates from disk)
 ├── database/
-│   ├── config.py          SOURCE_ID_MAP (8 sources), SourceMode, PluginConfig
+│   ├── config.py          SOURCE_ID_MAP (7 sources), SourceMode, PluginConfig
 │   ├── base_provider.py   ResidueSpec, MotifInstance, MotifType, BaseProvider ABC
 │   ├── registry.py        DatabaseRegistry — lazily loads providers
 │   ├── atlas_provider.py  Atlas JSON provider
@@ -49,7 +49,7 @@ PyMOL
 │   ├── representative_set.py NR list loader
 │   ├── nrlist_4.24_all.csv   BGSU NR representative list
 │   └── user_annotations/
-│       ├── user_provider.py  FR3D/RMS/RMSX/NoBIAS annotation loader
+│       ├── user_provider.py  FR3D/RMS/RMSX annotation loader
 │       └── converters.py     User annotation format parsers
 └── utils/
     ├── logger.py          PluginLogger with colored PyMOL console output
@@ -70,7 +70,7 @@ rmv_load_motif   →  dispatch to:
                      ├── Single source (local/web):
                      │   └── fetch_motif_data_action()
                      │       └── source_selector → provider.get_motifs() → store
-                     ├── User source (5–8):
+                     ├── User source (5–7):
                      │   └── load_user_annotations_action()
                      │       └── user_provider.load_annotations() → parse → store
                      └── Combine mode (multiple sources):
@@ -114,7 +114,7 @@ rmv_save <TYPE> cif  →  StructureExporter.export_instance()
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `config.py` | ~247 | SOURCE_ID_MAP (8 entries), SourceMode enum, PluginConfig dataclass |
+| `config.py` | ~247 | SOURCE_ID_MAP (7 entries), SourceMode enum, PluginConfig dataclass |
 | `base_provider.py` | ~362 | ABC for all providers: ResidueSpec, MotifInstance, MotifType, BaseProvider |
 | `registry.py` | ~302 | DatabaseRegistry — discovers and registers providers |
 | `atlas_provider.py` | ~278 | Parses bundled Atlas JSON files (7 motif types: HL, IL, J3–J7) |
@@ -133,8 +133,8 @@ rmv_save <TYPE> cif  →  StructureExporter.export_instance()
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `user_provider.py` | ~552 | Unified provider for FR3D, RMS, RMSX, NoBIAS |
-| `converters.py` | ~787 | FR3D CSV parser, RMS tab parser, RMSX log parser, NoBIAS parser |
+| `user_provider.py` | ~552 | Unified provider for FR3D, RMS, RMSX |
+| `converters.py` | ~787 | FR3D CSV parser, RMS tab parser, RMSX log parser |
 
 ### Utils Module
 
@@ -197,7 +197,7 @@ Fetches motif data from the currently selected source for the loaded PDB. Takes 
 
 **Implementation:** `load_motif_data()` → dispatches to:
 - `fetch_motif_data_action()` for curated sources (1–4)
-- `load_user_annotations_action()` for user sources (5–8)
+- `load_user_annotations_action()` for user sources (5–7)
 - `_load_combined_motifs()` for combine mode
 
 **Prerequisites:** A PDB must be loaded (`rmv_fetch`) and a source selected (`rmv_db`).
@@ -214,14 +214,13 @@ Sets the active data source. Supports multi-source combine, P-value filtering, a
 
 | ID | Provider | Type |
 |----|----------|------|
-| 1 | RNA 3D Atlas | Local |
+| 1 | RNA 3D Motif Atlas | Local |
 | 2 | Rfam | Local |
 | 3 | BGSU RNA 3D Hub | Web API |
 | 4 | Rfam API | Web API |
 | 5 | FR3D | User annotations |
 | 6 | RNAMotifScan (RMS) | User annotations + filtering |
 | 7 | RNAMotifScanX (RMSX) | User annotations + filtering |
-| 8 | NoBIAS | User annotations + filtering |
 
 **Multi-source detection:** When remaining args after the first source ID contain another valid source ID, combine mode is triggered.
 
@@ -231,8 +230,8 @@ Sets the active data source. Supports multi-source combine, P-value filtering, a
 
 ```
 rmv_db 3                                    # Single source
-rmv_db 8 7                                  # Combine NoBIAS + RMSX
-rmv_db 8 7, jaccard_threshold=0.80          # Custom threshold
+rmv_db 6 7                                  # Combine RMS + RMSX
+rmv_db 6 7, jaccard_threshold=0.80          # Custom threshold
 rmv_db 6 off                                # Disable filtering
 rmv_db 6 SARCIN-RICIN 0.01                  # Custom P-value
 rmv_db 7 /path/to/rmsx/data                 # Custom data path
@@ -291,11 +290,11 @@ Creates PyMOL objects for motif instances and renders them.
 In combine mode, the last non-numeric token is checked as a source filter keyword via `_resolve_source_filter()`:
 
 ```
-rmv_show K-TURN nobias       # Only NoBIAS-unique instances
+rmv_show K-TURN rms          # Only RMS-unique instances
 rmv_show K-TURN shared       # Only shared instances
 ```
 
-Supported keywords: `nobias`, `rmsx`, `rms`, `fr3d`, `rfam`, `atlas`, `bgsu`, `shared`, plus full source names.
+Supported keywords: `rmsx`, `rms`, `fr3d`, `rfam`, `atlas`, `bgsu`, `shared`, plus full source names.
 
 ---
 
@@ -511,7 +510,7 @@ class ResidueSpec:
 class MotifInstance:
     residues: List[ResidueSpec]
     annotation: str = ''    # Optional label
-    score: float = 0.0      # P-value for RMS/RMSX/NoBIAS
+    score: float = 0.0      # P-value for RMS/RMSX
 
 @dataclass
 class MotifType:
@@ -519,7 +518,7 @@ class MotifType:
     instances: List[MotifInstance]
 ```
 
-### Source 1 — RNA 3D Atlas (Local)
+### Source 1 — RNA 3D Motif Atlas (Local)
 
 - **File:** `atlas_provider.py`
 - **Data:** Bundled JSON files in `motif_database/RNA 3D motif atlas/` (e.g., `hl_4.5.json`, `il_4.5.json`)
@@ -548,21 +547,19 @@ class MotifType:
 - **Coverage:** 34 motif families (RM00001–RM00034)
 - **Cache:** 30 days
 
-### Sources 5–8 — User Annotations
+### Sources 5–7 — User Annotations
 
 - **File:** `user_annotations/user_provider.py` + `user_annotations/converters.py`
 - **Source 5 (FR3D):** Parses FR3D CSV output
 - **Source 6 (RMS):** Parses RNAMotifScan tab-separated result files with P-value filtering
 - **Source 7 (RMSX):** Parses RNAMotifScanX `result_*.log` files with P-value filtering
-- **Source 8 (NoBIAS):** Parses NoBIAS `*_nobias.txt` files with P-value filtering (delegates to RMSX parser — same format)
 
 **File locations (default):**
 ```
 database/user_annotations/
 ├── fr3d/                    FR3D CSV files
 ├── RNAMotifScan/            RMS (motif-type subdirectories)
-├── RNAMotifScanX/           RMSX (consensus subdirectories)
-└── NoBIAS/                  NoBIAS (flat *_nobias.txt files)
+└── RNAMotifScanX/           RMSX (consensus subdirectories)
 ```
 
 **Custom paths stored per-source** in `gui.user_data_paths: Dict[int, str]`.
@@ -575,13 +572,13 @@ database/user_annotations/
 
 **Default P-value thresholds:**
 
-| Motif | RMS | RMSX | NoBIAS |
-|-------|-----|------|--------|
-| KINK-TURN | 0.07 | 0.066 | 0.066 |
-| C-LOOP | 0.04 | 0.044 | 0.044 |
-| SARCIN-RICIN | 0.02 | 0.040 | 0.040 |
-| REVERSE KINK-TURN | 0.14 | 0.018 | 0.018 |
-| E-LOOP | 0.13 | 0.018 | 0.018 |
+| Motif | RMS | RMSX |
+|-------|-----|------|
+| KINK-TURN | 0.07 | 0.066 |
+| C-LOOP | 0.04 | 0.044 |
+| SARCIN-RICIN | 0.02 | 0.040 |
+| REVERSE KINK-TURN | 0.14 | 0.018 |
+| E-LOOP | 0.13 | 0.018 |
 
 ---
 
@@ -633,14 +630,14 @@ Motif databases (BGSU, Atlas, Rfam) use **auth_asym_id** chain IDs. When PyMOL l
 
 ## 7. Multi-Source Pipeline
 
-When combining sources (e.g., `rmv_db 8 7`):
+When combining sources (e.g., `rmv_db 6 7`):
 
 ### Step 1 — Fetch
 
 Each source independently fetches motifs for the PDB:
 ```
-NoBIAS → [K-TURN(6), SARCIN-RICIN(4), ...]
-RMSX   → [K-TURN(5), C-LOOP(3), SARCIN-RICIN(4), ...]
+RMS  → [K-TURN(6), SARCIN-RICIN(4), ...]
+RMSX → [K-TURN(5), C-LOOP(3), SARCIN-RICIN(4), ...]
 ```
 
 ### Step 2 — Enrich (`homolog_enricher.py`)
@@ -676,7 +673,7 @@ Sources are merged right-to-left with Jaccard deduplication:
 
 ### Step 7 — Source Filter Resolution
 
-In combine mode, `_resolve_source_filter()` (`gui.py`) categorizes merged instances as **unique** (single `_source_label`) or **shared** (`_also_found_in` not empty). Keywords (nobias, rmsx, shared, etc.) resolve to lists of instance numbers for per-source rendering.
+In combine mode, `_resolve_source_filter()` (`gui.py`) categorizes merged instances as **unique** (single `_source_label`) or **shared** (`_also_found_in` not empty). Keywords (rms, rmsx, shared, etc.) resolve to lists of instance numbers for per-source rendering.
 
 ### Storage
 
@@ -830,14 +827,12 @@ The central state object. Key attributes:
 | `cif_use_auth` | `int` | 1 = auth_asym_id, 0 = label_asym_id |
 | `auth_to_label_map` | `dict` | {auth_chain: label_chain} mapping |
 | `current_source_mode` | `str` | 'local', 'web', 'user', 'combine' |
-| `current_source_id` | `int\|str` | Numeric source ID (1–8) or combined (e.g., '8_7') |
+| `current_source_id` | `int\|str` | Numeric source ID (1–7) or combined (e.g., '6_7') |
 | `combined_source_ids` | `list` | Source IDs when combining |
 | `user_rms_filtering_enabled` | `bool` | RMS P-value filtering on/off |
 | `user_rmsx_filtering_enabled` | `bool` | RMSX P-value filtering on/off |
-| `user_nobias_filtering_enabled` | `bool` | NoBIAS P-value filtering on/off |
 | `user_rms_custom_pvalues` | `dict` | {motif_name: p_value} overrides |
 | `user_rmsx_custom_pvalues` | `dict` | {motif_name: p_value} overrides |
-| `user_nobias_custom_pvalues` | `dict` | {motif_name: p_value} overrides |
 | `user_data_paths` | `dict` | Per-source custom data paths: {source_id: path_str} |
 | `viz_manager` | `VisualizationManager` | Manages loading + rendering |
 
@@ -867,14 +862,14 @@ Handles multi-word motif type names (e.g., "4-WAY JUNCTION (J4) 1"):
 
 ### `_resolve_source_filter(keyword, combined_source_ids)`
 
-In combine mode, resolves keywords like `nobias`, `rmsx`, `shared` to lists of instance numbers matching that source or overlap category.
+In combine mode, resolves keywords like `rms`, `rmsx`, `shared` to lists of instance numbers matching that source or overlap category.
 
 ---
 
 ## Conventions
 
 - **PDB IDs** are stored uppercase (`loaded_pdb_id`) but PyMOL object names are lowercase (`loaded_pdb`)
-- **Source suffixes** appended to PyMOL object names: `_S3` (single), `_S_8_7` (combined)
+- **Source suffixes** appended to PyMOL object names: `_S3` (single), `_S_6_7` (combined)
 - **Motif type names** are uppercase internally (e.g., `HL`, `GNRA`, `SARCIN-RICIN`)
 - **Color aliases** cover both underscore and hyphen variants (e.g., `SARCIN_RICIN` and `SARCIN-RICIN`)
 - **Chain ID convention** defaults to `auth_asym_id` (cif_use_auth=1)

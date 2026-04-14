@@ -10,11 +10,11 @@
 
 ## Overview
 
-RSMViewer is a PyMOL plugin designed for structural biologists and computational RNA researchers. It automates the retrieval, standardization, visualization, and comparative analysis of RNA structural motifs. The plugin integrates multiple sources, including: BGSU RNA 3D Motif Atlas, Rfam, FR3D, RNAMotifScan (RMS), RNAMotifScanX (RMSX), and NoBIAS into a unified framework that standardizes heterogeneous motif annotations across formats, chain identifiers, and naming conventions, enabling automated visualization and comparative analysis within PyMOL.
+RSMViewer is a PyMOL plugin designed for structural biologists and computational RNA researchers. It automates the retrieval, standardization, visualization, and comparative analysis of RNA structural motifs. The plugin integrates multiple sources, including: BGSU RNA 3D Motif Atlas, Rfam, FR3D, RNAMotifScan (RMS), and RNAMotifScanX (RMSX) into a unified framework that standardizes heterogeneous motif annotations across formats, chain identifiers, and naming conventions, enabling automated visualization and comparative analysis within PyMOL.
 
 **Key capabilities:**
 
-- **Unified annotation retrieval** from 8 heterogeneous sources (2 locally integrated, 2 web API, 4 supporting annotation tool formats)
+- **Unified annotation retrieval** from 7 heterogeneous sources (2 locally integrated, 2 web API, 3 supporting annotation tool formats)
 - **Automatic standardization** chain ID harmonization (auth_asym_id ↔ label_asym_id), canonical motif naming, homolog-based enrichment, and P-value filtering
 - **Multi-source cascade merge** with category-aware Jaccard deduplication and source attribution
 - **Medoid-based structural superimposition** across single or multiple PDB structures
@@ -120,10 +120,10 @@ rmv_load_motif           # Fetch from Rfam
 ### 5. Multi-Source Combine
 
 ```
-rmv_db 8 7               # Combine NoBIAS + RMSX (left = highest priority)
+rmv_db 6 7               # Combine RMS + RMSX (left = highest priority)
 rmv_load_motif           # Fetches from both, merges with deduplication
 rmv_summary              # Unified summary with source attribution
-rmv_show K-TURN nobias   # Show only NoBIAS-unique instances
+rmv_show K-TURN rms      # Show only RMS-unique instances
 rmv_show K-TURN shared   # Show only instances found in both sources
 ```
 
@@ -172,14 +172,14 @@ rmv_save HL 3 cif        # Export HL instance #3 as mmCIF
 | `rmv_fetch <PDB_ID>, cif_use_auth=0` | Load with mmCIF label chain IDs |
 | `rmv_fetch <PDB_ID>, bg_color=white` | Load with custom background color |
 | `rmv_load_motif` | Fetch motif data from the currently selected source |
-| `rmv_db <N>` | Select data source by ID (1–8) |
+| `rmv_db <N>` | Select data source by ID (1–7) |
 | `rmv_db <N1> <N2>` | Combine multiple sources (left = highest priority) |
 | `rmv_db <N1> <N2>, jaccard_threshold=0.80` | Combine with custom merge threshold |
-| `rmv_db <N> /path/to/data` | Set custom data path (sources 5–8, per-source) |
-| `rmv_db <N> off` | Disable P-value filtering (sources 6–8) |
-| `rmv_db <N> on` | Enable P-value filtering (sources 6–8) |
-| `rmv_db <N> <MOTIF> <P-VALUE>` | Set custom P-value threshold (sources 6–8) |
-| `rmv_sources` | List all 8 available sources with descriptions |
+| `rmv_db <N> /path/to/data` | Set custom data path (sources 5–7, per-source) |
+| `rmv_db <N> off` | Disable P-value filtering (sources 6–7) |
+| `rmv_db <N> on` | Enable P-value filtering (sources 6–7) |
+| `rmv_db <N> <MOTIF> <P-VALUE>` | Set custom P-value threshold (sources 6–7) |
+| `rmv_sources` | List all 7 available sources with descriptions |
 | `rmv_refresh` | Force re-fetch from API (bypass 30-day cache) |
 
 ### Visualization & Navigation
@@ -190,7 +190,7 @@ rmv_save HL 3 cif        # Export HL instance #3 as mmCIF
 | `rmv_show <TYPE> <NO>` | Zoom to specific instance #NO |
 | `rmv_show <TYPE> <NO1>,<NO2>,<NO3>` | Show multiple specific instances |
 | `rmv_show <TYPE>, padding=N` | Expand residue ranges ±N for visualization context |
-| `rmv_show <TYPE> <SOURCE>` | Filter by source in combine mode (nobias/rmsx/shared) |
+| `rmv_show <TYPE> <SOURCE>` | Filter by source in combine mode (rms/rmsx/shared) |
 | `rmv_show ALL` | Show all motif types with PyMOL objects |
 | `rmv_view all` | Highlight all motif regions on structure (no objects created) |
 | `rmv_view <TYPE>` | Highlight and zoom to motif regions |
@@ -258,7 +258,7 @@ rmv_save HL 3 cif        # Export HL instance #3 as mmCIF
 
 ## Data Sources
 
-RSMViewer provides 8 data sources organized in three categories:
+RSMViewer provides 7 data sources organized in three categories:
 
 ### Online (Real-time API Access)
 
@@ -281,7 +281,6 @@ RSMViewer provides 8 data sources organized in three categories:
 | 5 | **FR3D** | `rmv_db 5` | No |
 | 6 | **RNAMotifScan (RMS)** | `rmv_db 6` | Yes |
 | 7 | **RNAMotifScanX (RMSX)** | `rmv_db 7` | Yes |
-| 8 | **NoBIAS** | `rmv_db 8` | Yes |
 
 ### Custom Data Paths (Per-Source, Independent)
 
@@ -291,22 +290,21 @@ Each user annotation source remembers its own custom path independently:
 rmv_db 5 /path/to/fr3d/data       # FR3D with custom directory
 rmv_db 6 ~/my_rms_data            # RMS with home-relative path
 rmv_db 7 /path/to/rmsx/data       # RMSX with custom directory
-rmv_db 8 /path/to/nobias/data     # NoBIAS with custom directory
 ```
 
-> Setting a path for source 7 does **not** overwrite the path for source 8.
+> Setting a path for one source does **not** overwrite the path for another.
 
-### P-Value Filtering (Sources 6–8)
+### P-Value Filtering (Sources 6–7)
 
-RMS, RMSX, and NoBIAS include P-values in their output. The plugin filters results using default thresholds:
+RMS and RMSX include P-values in their output. The plugin filters results using default thresholds:
 
-| Motif | RMS | RMSX | NoBIAS |
-|-------|-----|------|--------|
-| KINK-TURN | 0.07 | 0.066 | 0.066 |
-| C-LOOP | 0.04 | 0.044 | 0.044 |
-| SARCIN-RICIN | 0.02 | 0.040 | 0.040 |
-| REVERSE KINK-TURN | 0.14 | 0.018 | 0.018 |
-| E-LOOP | 0.13 | 0.018 | 0.018 |
+| Motif | RMS | RMSX |
+|-------|-----|------|
+| KINK-TURN | 0.07 | 0.066 |
+| C-LOOP | 0.04 | 0.044 |
+| SARCIN-RICIN | 0.02 | 0.040 |
+| REVERSE KINK-TURN | 0.14 | 0.018 |
+| E-LOOP | 0.13 | 0.018 |
 
 ```
 rmv_db 6 off                # Disable filtering (show all results)
@@ -352,16 +350,7 @@ rsmviewer/database/user_annotations/RNAMotifScanX/
     └── result_0_100_withbs.log
 ```
 
-### NoBIAS (Source 8)
-
-Flat directory with files named `<pdb>_<motif>_nobias.txt`:
-
-```
-rsmviewer/database/user_annotations/NoBIAS/
-└── 1s72_k-turn_nobias.txt
-```
-
-Both RMSX and NoBIAS use the same tab-separated format:
+RMSX uses a tab-separated format:
 
 ```
 #fragment_ID	aligned_regions	alignment_score	P-value
@@ -375,7 +364,7 @@ Both RMSX and NoBIAS use the same tab-separated format:
 When you select multiple sources, the plugin enters **combine mode**:
 
 ```
-rmv_db 8 7                 # NoBIAS (priority) + RMSX
+rmv_db 6 7                 # RMS (priority) + RMSX
 rmv_load_motif             # Runs the full combine pipeline
 ```
 
@@ -393,15 +382,15 @@ rmv_load_motif             # Runs the full combine pipeline
 Sources listed first have **highest priority**. When two instances overlap (Jaccard ≥ threshold), the higher-priority version is kept:
 
 ```
-rmv_db 8 7                 # NoBIAS (higher priority) + RMSX
+rmv_db 6 7                 # RMS (higher priority) + RMSX
 rmv_db 1 3 4               # Atlas (highest) + BGSU + Rfam API (lowest)
 ```
 
 ### Custom Jaccard Threshold
 
 ```
-rmv_db 8 7, jaccard_threshold=0.80    # 80% overlap required for deduplication
-rmv_db 8 7, jaccard_threshold=40      # Values >1.0 treated as percentages
+rmv_db 6 7, jaccard_threshold=0.80    # 80% overlap required for deduplication
+rmv_db 6 7, jaccard_threshold=40      # Values >1.0 treated as percentages
 ```
 
 ### Source Filtering in Combine Mode
@@ -409,13 +398,13 @@ rmv_db 8 7, jaccard_threshold=40      # Values >1.0 treated as percentages
 After merging, use source filter keywords with `rmv_show` to render subsets:
 
 ```
-rmv_show K-TURN nobias     # Only NoBIAS-unique instances
+rmv_show K-TURN rms        # Only RMS-unique instances
 rmv_show K-TURN rmsx       # Only RMSX-unique instances
 rmv_show K-TURN shared     # Only instances found in both sources
 rmv_show K-TURN            # All instances (no filter)
 ```
 
-Supported keywords: `nobias`, `rmsx`, `rms`, `fr3d`, `rfam`, `atlas`, `bgsu`, `shared`.
+Supported keywords: `rmsx`, `rms`, `fr3d`, `rfam`, `atlas`, `bgsu`, `shared`.
 
 ---
 
@@ -615,12 +604,12 @@ rmv_view all hide            # Reset coloring
 
 ```
 rmv_fetch 1S72
-rmv_db 8 /path/to/nobias     # Set NoBIAS data path
+rmv_db 6 ~/my_rms_data       # Set RMS data path
 rmv_db 7 /path/to/rmsx       # Set RMSX data path
-rmv_db 8 7                   # Combine: NoBIAS (priority) + RMSX
+rmv_db 6 7                   # Combine: RMS (priority) + RMSX
 rmv_load_motif               # Merge with Jaccard deduplication
 rmv_summary K-TURN            # View attribution (unique/shared breakdown)
-rmv_show K-TURN nobias        # Show NoBIAS-unique instances
+rmv_show K-TURN rms           # Show RMS-unique instances
 rmv_show K-TURN shared        # Show shared instances
 ```
 
@@ -679,10 +668,10 @@ rna-motif-visualizer/
 │   ├── image_saver.py               # PNG export with 8 representations
 │   ├── structure_exporter.py        # mmCIF export (original coordinates from disk)
 │   ├── database/
-│   │   ├── config.py                # SOURCE_ID_MAP (8 sources), PluginConfig
+│   │   ├── config.py                # SOURCE_ID_MAP (7 sources), PluginConfig
 │   │   ├── base_provider.py         # ResidueSpec, MotifInstance, MotifType, BaseProvider ABC
 │   │   ├── registry.py              # DatabaseRegistry — lazy provider loading
-│   │   ├── atlas_provider.py        # RNA 3D Atlas JSON provider
+│   │   ├── atlas_provider.py        # RNA 3D Motif Atlas JSON provider
 │   │   ├── rfam_provider.py         # Rfam Stockholm/SEED provider
 │   │   ├── bgsu_api_provider.py     # BGSU API — HTML scraping + CSV fallback
 │   │   ├── rfam_api_provider.py     # Rfam API — REST endpoint for 34 motif families
@@ -694,13 +683,12 @@ rna-motif-visualizer/
 │   │   ├── converters.py            # Provider-specific format converters
 │   │   ├── representative_set.py    # BGSU NR list loader
 │   │   ├── nrlist_4.24_all.csv      # BGSU NR representative list
-│   │   └── user_annotations/        # FR3D, RMS, RMSX, NoBIAS loaders
+│   │   └── user_annotations/        # FR3D, RMS, RMSX loaders
 │   │       ├── user_provider.py     # Unified user annotation provider
-│   │       ├── converters.py        # Format parsers (FR3D CSV, RMS/RMSX/NoBIAS tab-separated)
+│   │       ├── converters.py        # Format parsers (FR3D CSV, RMS/RMSX tab-separated)
 │   │       ├── fr3d/                # FR3D data files
 │   │       ├── RNAMotifScan/        # RMS data (motif-type subdirectories)
-│   │       ├── RNAMotifScanX/       # RMSX data (consensus subdirectories)
-│   │       └── NoBIAS/              # NoBIAS data (flat files)
+│   │       └── RNAMotifScanX/       # RMSX data (consensus subdirectories)
 │   ├── motif_database/              # Offline bundled data
 │   │   ├── RNA 3D motif atlas/      # Atlas JSON files (HL, IL, J3–J7)
 │   │   └── Rfam motif database/     # Rfam Stockholm files (19 motif types)
@@ -746,7 +734,7 @@ MIT License — see [LICENSE](LICENSE) file.
 - **Rfam Database** — Conserved RNA family and motif definitions
 - **RNA 3D Motif Atlas** — RNA motif taxonomy and structure analysis
 - **PyMOL** — Schrödinger, LLC; molecular visualization platform
-- **RNAMotifScan, RNAMotifScanX, FR3D & NoBIAS** — Community tools for RNA motif annotation
+- **RNAMotifScan, RNAMotifScanX & FR3D** — Community tools for RNA motif annotation
 
 ---
 

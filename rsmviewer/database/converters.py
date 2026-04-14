@@ -3,7 +3,7 @@ RSMViewer - Format Converters
 Provides converters for different motif database formats to unified format.
 
 Supported formats:
-- RNA 3D Atlas JSON format
+- RNA 3D Motif Atlas JSON format
 - Rfam Stockholm (SEED) format
 - Future: CIF annotations, custom JSON schemas
 

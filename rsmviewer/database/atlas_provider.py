@@ -1,5 +1,5 @@
 """
-RSMViewer - RNA 3D Atlas Database Provider
+RSMViewer - RNA 3D Motif Atlas Database Provider
 Implements BaseProvider for RNA 3D Motif Atlas JSON files.
 
 This provider loads motif data from the RNA 3D Motif Atlas format,
@@ -41,7 +41,7 @@ class RNA3DAtlasProvider(BaseProvider):
     
     def __init__(self, database_path: str):
         """
-        Initialize the RNA 3D Atlas provider.
+        Initialize the RNA 3D Motif Atlas provider.
         
         Args:
             database_path: Path to directory containing Atlas JSON files
@@ -96,7 +96,7 @@ class RNA3DAtlasProvider(BaseProvider):
             return True
             
         except Exception as e:
-            print(f"Error initializing RNA 3D Atlas provider: {e}")
+            print(f"Error initializing RNA 3D Motif Atlas provider: {e}")
             return False
     
     def _load_registry(self) -> None:

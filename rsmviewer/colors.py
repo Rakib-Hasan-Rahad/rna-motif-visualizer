@@ -2,7 +2,7 @@
 RSMViewer - Color Configuration Module
 Defines unique colors for each motif class for clear visualization.
 
-Supports both RNA 3D Atlas and Rfam motif types with distinct, vibrant colors.
+Supports both RNA 3D Motif Atlas and Rfam motif types with distinct, vibrant colors.
 
 Author: CBB LAB @Rakib Hasan Rahad
 Version: 1.0.0
@@ -387,7 +387,7 @@ def print_color_legend(loaded_motifs=None):
             print(f"  {motif_type:<15} {color_name:<15} ({r}, {g}, {b})")
     else:
         # Show all available colors
-        print("\n  RNA 3D Atlas Motifs (HL, IL, Junctions):")
+        print("\n  RNA 3D Motif Atlas Motifs (HL, IL, Junctions):")
         print("-" * 60)
         print(f"  {'MOTIF':<12} {'COLOR':<12} {'RGB':<18} {'DESCRIPTION'}")
         print("-" * 60)
