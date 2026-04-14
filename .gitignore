@@ -43,6 +43,8 @@ env/
 
 # Logs
 *.log
+# Exception: RNAMotifScanX result data files
+!rsmviewer/database/user_annotations/RNAMotifScanX/**/*.log
 
 # Testing
 .pytest_cache/
