@@ -367,7 +367,7 @@ When you select multiple sources, the plugin enters **combine mode**:
 rmv_db 6 7                 # RMS (priority) + RMSX
 rmv_load_motif             # Runs the full combine pipeline
 ```
-
+![Merging Workflow](images/5.png)
 ### Pipeline Steps
 
 1. **Fetch** — motifs are retrieved from each source independently
