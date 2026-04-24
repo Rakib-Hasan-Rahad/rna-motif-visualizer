@@ -912,4 +912,4 @@ rmv_view hide                     # Same as rmv_view all hide
 
 ---
 
-*RSMViewer v1.0.0 — CBB LAB KU @Rakib Hasan Rahad*
+*RSMViewer v1.0.0 — CBB LAB KU @Dr. Zhong*
