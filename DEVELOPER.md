@@ -876,4 +876,4 @@ In combine mode, resolves keywords like `rms`, `rmsx`, `shared` to lists of inst
 
 ---
 
-*RSMViewer v1.0.0 — CBB LAB KU @Rakib Hasan Rahad*
+*RSMViewer v1.0.0 — CBB LAB KU @Dr. Zhong*
