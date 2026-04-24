@@ -1,4 +1,4 @@
-# RSMViewer — Tutorial
+# RSMViewer: Tutorial
 
 A complete step-by-step guide for using the RSMViewer PyMOL plugin.
 
