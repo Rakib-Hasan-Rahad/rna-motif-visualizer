@@ -1906,8 +1906,17 @@ class MotifVisualizerGUI:
             for sid in self.combined_source_ids:
                 info = SOURCE_ID_MAP.get(sid, {})
                 tool = info.get('tool', '')
+                subtype = info.get('subtype', '')
                 name = info.get('name', f'Source {sid}')
-                alias = tool if tool else name.split()[0].lower()
+                # Prefer tool > subtype > first word of name as the alias
+                # shown in suggestions.  Must match aliases recognised by
+                # ``_resolve_source_filter`` so the suggested command works.
+                if tool:
+                    alias = tool
+                elif subtype:
+                    alias = subtype
+                else:
+                    alias = name.split()[0].lower()
                 print(f"    rmv_show {motif_arg} {alias:<16} Show {name}-only instances")
             print(f"    rmv_show {motif_arg} shared           Show shared instances")
         print(f"    rmv_summary {motif_arg} <NO>      Show details of specific instance")
@@ -2064,25 +2073,45 @@ class MotifVisualizerGUI:
 
         # --- Match against source labels ---
         # Build a lookup: lowercase fragments -> full label
-        # Accept: full name, tool shorthand, or any word in the name
+        # Accept: full name, full name w/o parentheses, tool shorthand,
+        # subtype shorthand, or any single word in the name.
+        import re as _re
         from .database.config import SOURCE_ID_MAP
-        alias_to_label = {}  # alias (upper) -> full label
+        alias_to_label = {}  # alias (upper, normalised) -> full label
+
+        def _norm(s: str) -> str:
+            # Collapse whitespace and uppercase for case/spacing-insensitive
+            # matching of multi-token source names.
+            return " ".join(s.split()).upper()
+
         for sid in (self.combined_source_ids or []):
             info = SOURCE_ID_MAP.get(sid, {})
             full_name = info.get('name', '')
             if not full_name:
                 continue
-            # Full name exact
-            alias_to_label[full_name.upper()] = full_name
+            # Full name (with parentheses), normalised
+            alias_to_label[_norm(full_name)] = full_name
+            # Full name with parentheses stripped — e.g. "RNAMotifScanX"
+            # for "RNAMotifScanX (RMSX)"
+            no_parens = _re.sub(r'\s*\([^)]*\)\s*', ' ', full_name)
+            alias_to_label[_norm(no_parens)] = full_name
             # Tool shorthand (e.g., 'rmsx', 'nobias', 'rms', 'fr3d')
             tool = info.get('tool', '')
             if tool:
-                alias_to_label[tool.upper()] = full_name
+                alias_to_label[_norm(tool)] = full_name
+            # Subtype shorthand for local/web sources (e.g., 'bgsu',
+            # 'atlas', 'rfam', 'rfam_api') — these sources use 'subtype'
+            # rather than 'tool' in SOURCE_ID_MAP.
+            subtype = info.get('subtype', '')
+            if subtype:
+                alias_to_label[_norm(subtype)] = full_name
+                alias_to_label[_norm(subtype.replace('_', ''))] = full_name
+                alias_to_label[_norm(subtype.replace('_', ' '))] = full_name
             # Each word in the name (e.g., 'RNAMOTIFSCANX', 'RMSX')
-            for word in full_name.replace('(', '').replace(')', '').split():
-                alias_to_label[word.upper()] = full_name
+            for word in full_name.replace('(', ' ').replace(')', ' ').split():
+                alias_to_label[_norm(word)] = full_name
 
-        matched_label = alias_to_label.get(sf)
+        matched_label = alias_to_label.get(_norm(source_filter))
         if matched_label is None:
             return None  # not a recognized source filter
 
@@ -3604,7 +3633,14 @@ def initialize_gui():
         """
         # PyMOL splits by both spaces and commas into separate positional
         # args.  e.g. "rmv_show HL 1,3,5" arrives as ("HL", "1", "3", "5")
-        all_parts = [str(motif_type)] + [str(a) for a in extra_args]
+        # However, multi-token args like "rmv_show K-TURN rmsx" can arrive
+        # as a single positional ("K-TURN rmsx") depending on quoting and
+        # the PyMOL command parser path.  Split the first arg by spaces
+        # ourselves so that source filter words and multi-word motif types
+        # are always recognised.
+        first_parts = str(motif_type).split() if motif_type else []
+        rest_parts = [str(a) for a in extra_args]
+        all_parts = first_parts + rest_parts
         # Strip empty / whitespace-only parts
         all_parts = [p.strip() for p in all_parts if p.strip()]
         
@@ -3655,19 +3691,27 @@ def initialize_gui():
             return
 
         # --- Source filter detection (combine mode) ---
-        # e.g. "rmv_show K-TURN nobias" or "rmv_show K-TURN shared"
-        # The last non-numeric token may be a source keyword.
+        # e.g. "rmv_show K-TURN nobias", "rmv_show K-TURN shared", or a
+        # full source name "rmv_show K-TURN BGSU RNA 3D Hub".  We try
+        # matching progressively LONGER suffixes of all_parts as the
+        # source filter (longest first), joining them with spaces.  The
+        # longest match that resolves wins, so multi-word source names
+        # always take priority over a coincidental short-alias match
+        # within the same token sequence.
         source_filter_ids = None
         source_filter_word = None
         if not instance_nums and len(all_parts) >= 2:
-            candidate = all_parts[-1]
-            # Try treating everything except the last token as the motif name
-            candidate_motif = " ".join(all_parts[:-1]).upper()
-            resolved = gui._resolve_source_filter(candidate_motif, candidate)
-            if resolved is not None:
-                source_filter_ids = resolved
-                source_filter_word = candidate
-                all_parts = all_parts[:-1]  # Remove filter word from motif name
+            for k in range(len(all_parts) - 1, 0, -1):
+                candidate = " ".join(all_parts[-k:])
+                candidate_motif = " ".join(all_parts[:-k]).upper()
+                if not candidate_motif:
+                    continue
+                resolved = gui._resolve_source_filter(candidate_motif, candidate)
+                if resolved is not None:
+                    source_filter_ids = resolved
+                    source_filter_word = candidate
+                    all_parts = all_parts[:-k]  # Strip filter tokens
+                    break
         
         raw_motif = " ".join(all_parts)
         motif_arg, inst_no = _resolve_motif_type_and_instance(raw_motif, '')

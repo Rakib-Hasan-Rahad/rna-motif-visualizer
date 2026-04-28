@@ -22,10 +22,19 @@ Algorithm:
   In each pairwise merge:
     - For each motif in the lower-priority set (updater):
       - Compute its base category
-      - Check Jaccard overlap against ref motifs of the SAME base category
-      - If Jaccard >= threshold: DISCARD updater motif
-      - Otherwise: KEEP updater motif (unique within that category)
-    - Final = ref motifs + non-overlapping updater motifs
+      - Compare against ref motifs of the SAME base category:
+        1. If updater ⊂ ref (strict subset): DISCARD updater (annotate ref).
+        2. If ref ⊂ updater (strict superset): REPLACE ref with updater
+           (file under ref's key — priority naming convention).
+        3. Else if Jaccard >= threshold: DISCARD updater (annotate ref).
+        4. Else: KEEP updater (file under priority's key when there is
+           exactly one ref key for the base category, otherwise under the
+           updater's own key).
+    - Final = ref motifs + non-discarded updater motifs
+
+  Subset/superset checks always take precedence over Jaccard-based
+  priority discard so that the larger, more informative residue set is
+  preserved regardless of which source ranked higher.
 
 Uses Jaccard similarity: J(A,B) = |A ∩ B| / |A ∪ B|
 Threshold: 0.60 by default
@@ -313,6 +322,33 @@ class CascadeMerger:
                 if rset:
                     bucket.append((mtype.upper(), inst, rset))
 
+        # Map: base_category -> set of distinct ref keys that share that
+        # category.  Used to decide whether a surviving (unique) updater
+        # motif should adopt the ref's key (priority naming) or keep its own.
+        # Rule: if exactly ONE ref key represents the base category, the
+        # updater inherits that key so all motifs of the same biological
+        # category appear together (e.g. KINK-TURN survivors filed under
+        # K-TURN when source 7 has priority).  When the ref source uses
+        # multiple suffixed keys for the same category (e.g. Rfam
+        # SARCIN_RICIN_1 + SARCIN_RICIN_2), the updater keeps its own key
+        # to avoid arbitrary bucketing.
+        ref_keys_by_cat: Dict[str, List[str]] = {}
+        for mtype in ref.keys():
+            cat = _get_base_category(mtype)
+            keys = ref_keys_by_cat.setdefault(cat, [])
+            k_upper = mtype.upper()
+            if k_upper not in keys:
+                keys.append(k_upper)
+
+        def _resolve_target_key(u_cat: str, u_key: str) -> str:
+            """Choose the dict key under which a kept updater motif should
+            be filed.  Prefers a single matching ref key for the same
+            category (priority naming convention)."""
+            ref_keys = ref_keys_by_cat.get(u_cat, [])
+            if len(ref_keys) == 1:
+                return ref_keys[0]
+            return u_key
+
         # Check each updater motif against same-base-category ref motifs
         stats = {'kept': 0, 'discarded': 0, 'subsumed': 0, 'replaced': 0}
 
@@ -324,52 +360,32 @@ class CascadeMerger:
             for u_inst in u_instances:
                 u_rset = _get_residue_set(u_inst)
                 if not u_rset:
-                    # No residues – keep it anyway
-                    merged.setdefault(u_key, []).append(u_inst)
+                    # No residues – keep it anyway, filed under canonical key
+                    target_key = _resolve_target_key(u_cat, u_key)
+                    merged.setdefault(target_key, []).append(u_inst)
                     stats['kept'] += 1
                     continue
 
-                # --- Phase 1: Standard Jaccard overlap ---
-                is_overlap = False
-                best_j = 0.0
-                best_ref_inst = None
-
-                for _r_key, r_inst, r_rset in same_cat_refs:
-                    j = _jaccard(u_rset, r_rset)
-                    if j >= self.threshold:
-                        is_overlap = True
-                        if j > best_j:
-                            best_j = j
-                            best_ref_inst = r_inst
-                        break  # Found overlap, skip remaining
-
-                if is_overlap:
-                    stats['discarded'] += 1
-                    if best_ref_inst is not None:
-                        _annotate_overlap(best_ref_inst, u_inst)
-                    logger.debug(
-                        f"[CASCADE] Discarded {updater_label} motif "
-                        f"'{u_key}/{u_inst.instance_id}' - overlaps with "
-                        f"{ref_label} category '{u_cat}' (Jaccard={best_j:.3f})"
-                    )
-                    continue
-
-                # --- Phase 2: Asymmetric containment (subset check) ---
-                # If standard Jaccard < threshold, one set may still be a
-                # complete subset of the other (e.g. 2 residues inside 11).
-                # When |A ∩ B| / |smaller| = 1.0 the smaller set adds no new
-                # information — keep the larger, discard the smaller.
+                # --- Phase 1: Asymmetric containment (subset / superset) ---
+                # Subset relationships ALWAYS take precedence over Jaccard
+                # priority-based discard: the larger residue set is the
+                # more informative annotation regardless of which source
+                # has higher priority.  (See COMBINE_GUIDE.md Rule 10.)
+                #
+                # • u ⊂ r (strict) : updater adds nothing  → discard updater
+                # • r ⊂ u (strict) : updater is a superset → replace ref
+                #                    with updater (file under ref's key)
                 containment_action = None
 
                 for _r_key, r_inst, r_rset in same_cat_refs:
-                    if not r_rset:
+                    if not r_rset or u_rset == r_rset:
+                        # Equal sets fall through to Jaccard branch (which
+                        # will discard the updater as duplicate, J=1.0).
                         continue
                     if u_rset.issubset(r_rset):
-                        # Updater fully contained in ref → discard updater
                         containment_action = ('discard_updater', r_inst, _r_key, r_rset)
                         break
-                    elif r_rset.issubset(u_rset):
-                        # Ref fully contained in updater → replace ref with updater
+                    if r_rset.issubset(u_rset):
                         containment_action = ('replace_ref', r_inst, _r_key, r_rset)
                         break
 
@@ -399,20 +415,10 @@ class CascadeMerger:
                         # (preserves priority source naming convention)
                         merged.setdefault(c_ref_key, []).append(u_inst)
                         # Build combined source label (e.g. "NoBIAS + RMSX")
-                        # Cannot use _annotate_overlap here because we need
-                        # to relabel _source_label to the ref's (priority)
-                        # label.  _annotate_overlap would add the ref's label
-                        # to _also_found_in, and the subsequent relabel would
-                        # make _source_label == _also_found_in entry, which
-                        # the display layer deduplicates → losing the updater
-                        # attribution entirely.  Instead, manually build
-                        # _also_found_in with the updater's original label.
                         upd_label_str = u_inst.metadata.get('_source_label', '')
                         ref_label_str = c_ref_inst.metadata.get('_source_label', '')
-                        # Set primary label to ref's (priority) label
                         if ref_label_str:
                             u_inst.metadata['_source_label'] = ref_label_str
-                        # _also_found_in: updater's original label + propagated
                         also = list(u_inst.metadata.get('_also_found_in', []))
                         if upd_label_str and upd_label_str != ref_label_str and upd_label_str not in also:
                             also.append(upd_label_str)
@@ -432,10 +438,42 @@ class CascadeMerger:
                             f"'{u_key}/{u_inst.instance_id}' "
                             f"({len(c_ref_rset)} → {len(u_rset)} residues)"
                         )
-                else:
-                    # Truly unique – keep under updater's original key
-                    merged.setdefault(u_key, []).append(u_inst)
-                    stats['kept'] += 1
+                    continue
+
+                # --- Phase 2: Standard Jaccard overlap ---
+                # Only reached when neither set is a strict subset of the
+                # other.  If overlap is high enough, prefer the priority
+                # (ref) version and discard the updater.
+                is_overlap = False
+                best_j = 0.0
+                best_ref_inst = None
+
+                for _r_key, r_inst, r_rset in same_cat_refs:
+                    j = _jaccard(u_rset, r_rset)
+                    if j >= self.threshold:
+                        is_overlap = True
+                        if j > best_j:
+                            best_j = j
+                            best_ref_inst = r_inst
+                        break
+
+                if is_overlap:
+                    stats['discarded'] += 1
+                    if best_ref_inst is not None:
+                        _annotate_overlap(best_ref_inst, u_inst)
+                    logger.debug(
+                        f"[CASCADE] Discarded {updater_label} motif "
+                        f"'{u_key}/{u_inst.instance_id}' - overlaps with "
+                        f"{ref_label} category '{u_cat}' (Jaccard={best_j:.3f})"
+                    )
+                    continue
+
+                # --- Truly unique ---
+                # File under the priority (ref) key when the base category
+                # has exactly one ref key, otherwise keep updater's key.
+                target_key = _resolve_target_key(u_cat, u_key)
+                merged.setdefault(target_key, []).append(u_inst)
+                stats['kept'] += 1
 
         logger.info(
             f"[CASCADE] Pairwise merge {ref_label} + {updater_label}: "
