@@ -675,6 +675,7 @@ Sources are merged right-to-left, category-aware. The pairwise step runs in two 
 ### Step 7 — Source Filter Resolution
 
 In combine mode, `_resolve_source_filter()` (`gui.py`) categorizes merged instances as **unique** (single `_source_label`) or **shared** (`_also_found_in` not empty). Keywords (rms, rmsx, nobias, shared, etc.) resolve to lists of instance numbers for per-source rendering. Aliases include the SOURCE_ID_MAP full label, the label with parenthesised shorthand stripped (`RNAMotifScanX (RMSX)` → `RNAMotifScanX`), the `tool`/`subtype` shorthand, and any individual word in the label — a longest-first multi-token scan in `show_motif` lets full names like `BGSU RNA 3D Hub` be passed without quoting.
+![Merging Workflow](images/5.png)
 
 ### Storage
 
