@@ -662,7 +662,8 @@ class MotifVisualizerGUI:
         self.viz_manager.cmd.enable(structure_name)
         self.viz_manager.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
         self.viz_manager.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
-        self.viz_manager.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
+
+        self.viz_manager.cmd.set('cartoon_tube_radius', 0.37, f"model {structure_name}")
         self.viz_manager.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
 
         # Filter to current PDB + source
@@ -3264,7 +3265,17 @@ def initialize_gui():
             else:
                 # PDB ID — use cmd.fetch
                 cmd.fetch(pdb_arg, structure_name)
-            
+
+            # Apply uniform cartoon tube radius to the loaded structure so
+            # motif objects (rendered slightly thicker at 0.4) sit clearly on
+            # top.  Scoping to the structure name leaves any other loaded
+            # objects untouched.
+            try:
+                cmd.set('cartoon_nucleic_acid_mode', 4, structure_name, quiet=1)
+                cmd.set('cartoon_tube_radius', 0.37, structure_name, quiet=1)
+            except Exception:
+                pass
+
             # Store loaded PDB info
             prev_pdb = gui.loaded_pdb_id
             gui.loaded_pdb = structure_name

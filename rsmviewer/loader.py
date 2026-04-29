@@ -465,7 +465,7 @@ class VisualizationManager:
             
             # Set consistent cartoon nucleic acid settings for uniform appearance
             self.cmd.set('cartoon_nucleic_acid_mode', 4)  # Simple tube mode
-            self.cmd.set('cartoon_tube_radius', 0.4)
+            self.cmd.set('cartoon_tube_radius', 0.37)
             
             # Color uniformly
             self.cmd.color(background_color, rna_selection)
@@ -1941,7 +1941,7 @@ class VisualizationManager:
         self.cmd.enable(structure_name)
         self.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
         self.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
-        self.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
+        self.cmd.set('cartoon_tube_radius', 0.37, f"model {structure_name}")
         self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
 
         # Collect all residue selections for zoom target
@@ -2016,7 +2016,7 @@ class VisualizationManager:
         self.cmd.enable(structure_name)
         self.cmd.show('cartoon', f"model {structure_name} and polymer.nucleic")
         self.cmd.set('cartoon_nucleic_acid_mode', 4, f"model {structure_name}")
-        self.cmd.set('cartoon_tube_radius', 0.4, f"model {structure_name}")
+        self.cmd.set('cartoon_tube_radius', 0.37, f"model {structure_name}")
         self.cmd.color('gray80', f"model {structure_name} and polymer.nucleic")
 
         detail = motif_details[instance_no - 1]
