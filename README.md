@@ -27,7 +27,7 @@ Visualization of RNA structural motifs using standard PyMOL workflows typically 
 
 In contrast, RSMViewer automates this process through a small set of commands, enabling motif annotation from integrated databases, standardized visualization, consistent naming of motif objects, and structured export of outputs. This automation significantly reduces manual effort and ensures reproducibility across datasets and analyses.
 
-![Comparison of conventional workflow and RSMViewer](conventional method vs RSMViewer.png)
+![Comparison of conventional workflow and RSMViewer](images/conventional method vs RSMViewer.png)
 
 ## Installation
 
