@@ -21,6 +21,13 @@ RSMViewer is a PyMOL plugin designed for structural biologists and computational
 - **Batch export** of motif instances as high-resolution PNG images or  mmCIF files with original coordinates
 
 ---
+## Comparison with Conventional PyMOL Workflows
+
+Visualization of RNA structural motifs using standard PyMOL workflows typically involves multiple manual steps, including structure retrieval, residue selection, representation adjustment, coloring, and export. These steps must be repeated for each motif instance.
+
+In contrast, RSMViewer automates this process through a small set of commands, enabling motif annotation from integrated databases, standardized visualization, consistent naming of motif objects, and structured export of outputs. This automation significantly reduces manual effort and ensures reproducibility across datasets and analyses.
+
+![Comparison of conventional workflow and RSMViewer](conventional method vs RSMViewer.png)
 
 ## Installation
 
